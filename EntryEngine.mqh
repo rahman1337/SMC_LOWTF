@@ -25,7 +25,7 @@ input double InpEntryStopBufferATR = 0.10;
 
 input double InpEntryRiskReward = 3.0;
 
-input int InpEntryMaxBarsAfterOB = 20;
+input int    InpEntryMaxBarsAfterOB = 20;
 
 
 //+------------------------------------------------------------------+
@@ -41,7 +41,7 @@ void ResetEntryState()
 
 
 //+------------------------------------------------------------------+
-//| Get ATR for Entry Timeframe                                     |
+//| Get ATR for Entry Timeframe                                      |
 //+------------------------------------------------------------------+
 
 double GetEntryATR(
@@ -146,6 +146,107 @@ bool CandleTouchesOrderBlock(
 
 
 //+------------------------------------------------------------------+
+//| Check candle happened after OB                                   |
+//+------------------------------------------------------------------+
+
+bool IsCandleAfterOB(
+   ENUM_TIMEFRAMES timeframe,
+   int shift,
+   OrderBlockState &ob
+)
+{
+   if(ob.createdTime <= 0)
+      return false;
+
+   datetime candleTime =
+      iTime(
+         _Symbol,
+         timeframe,
+         shift
+      );
+
+   if(candleTime <= 0)
+      return false;
+
+   if(candleTime <= ob.createdTime)
+      return false;
+
+   return true;
+}
+
+
+//+------------------------------------------------------------------+
+//| Check candle happened after M5 structure confirmation            |
+//+------------------------------------------------------------------+
+
+bool IsCandleAfterStructureConfirmation(
+   ENUM_TIMEFRAMES timeframe,
+   int shift
+)
+{
+   /*
+      Entry confirmation must occur AFTER the M5 structure
+      confirmation candle.
+
+      This prevents an old rejection candle from becoming
+      an entry trigger before the structure is actually confirmed.
+   */
+
+   if(g_Structure.confirmationTime <= 0)
+      return false;
+
+   datetime candleTime =
+      iTime(
+         _Symbol,
+         timeframe,
+         shift
+      );
+
+   if(candleTime <= 0)
+      return false;
+
+   if(candleTime <=
+      g_Structure.confirmationTime)
+   {
+      return false;
+   }
+
+   return true;
+}
+
+
+//+------------------------------------------------------------------+
+//| Check entry candle chronological sequence                        |
+//+------------------------------------------------------------------+
+
+bool IsValidEntryCandleSequence(
+   ENUM_TIMEFRAMES timeframe,
+   int shift,
+   OrderBlockState &ob
+)
+{
+   if(!IsCandleAfterOB(
+         timeframe,
+         shift,
+         ob
+      ))
+   {
+      return false;
+   }
+
+   if(!IsCandleAfterStructureConfirmation(
+         timeframe,
+         shift
+      ))
+   {
+      return false;
+   }
+
+   return true;
+}
+
+
+//+------------------------------------------------------------------+
 //| Candle rejection                                                 |
 //+------------------------------------------------------------------+
 
@@ -157,6 +258,9 @@ bool IsRejectionCandle(
    double &body
 )
 {
+   wick = 0.0;
+   body = 0.0;
+
    double open =
       iOpen(
          _Symbol,
@@ -185,6 +289,14 @@ bool IsRejectionCandle(
          shift
       );
 
+   if(open <= 0.0 ||
+      high <= 0.0 ||
+      low <= 0.0 ||
+      close <= 0.0)
+   {
+      return false;
+   }
+
    double range =
       high - low;
 
@@ -207,7 +319,8 @@ bool IsRejectionCandle(
       MathMin(
          open,
          close
-      ) - low;
+      ) -
+      low;
 
    double atr =
       GetEntryATR(
@@ -245,22 +358,26 @@ bool IsRejectionCandle(
 
       bool sufficientSize =
          lowerWick >=
-         atr * InpEntryMinimumRejectionATR;
+         atr *
+         InpEntryMinimumRejectionATR;
 
+
+      // Strong bullish rejection.
       if(directionalClose &&
          sufficientWick &&
+         sufficientBody &&
          sufficientSize)
       {
          return true;
       }
 
-      // Strong rejection can also close neutral/slightly bearish
-      // as long as the lower wick dominates.
+
+      // Strong rejection can close neutral/slightly bearish
+      // provided the lower wick dominates.
       if(sufficientWick &&
+         sufficientBody &&
          sufficientSize &&
-         lowerWick > upperWick &&
-         bodyPercent >=
-         InpEntryMinimumBodyPercent)
+         lowerWick > upperWick)
       {
          return true;
       }
@@ -296,20 +413,26 @@ bool IsRejectionCandle(
 
       bool sufficientSize =
          upperWick >=
-         atr * InpEntryMinimumRejectionATR;
+         atr *
+         InpEntryMinimumRejectionATR;
 
+
+      // Strong bearish rejection.
       if(directionalClose &&
          sufficientWick &&
+         sufficientBody &&
          sufficientSize)
       {
          return true;
       }
 
+
+      // Strong rejection can close neutral/slightly bullish
+      // provided the upper wick dominates.
       if(sufficientWick &&
+         sufficientBody &&
          sufficientSize &&
-         upperWick > lowerWick &&
-         bodyPercent >=
-         InpEntryMinimumBodyPercent)
+         upperWick > lowerWick)
       {
          return true;
       }
@@ -350,10 +473,29 @@ bool FindM5Rejection(
       return false;
 
 
+   /*
+      Entry rejection MUST happen after:
+
+         1. OB creation
+         2. M5 structure confirmation
+
+      This prevents the EA from using an old rejection candle.
+   */
+
+   int bars =
+      Bars(
+         _Symbol,
+         PERIOD_M5
+      );
+
+   if(bars <= 2)
+      return false;
+
+
    int maxBars =
       MathMin(
          InpEntryMaxBarsAfterOB,
-         ob.shift - 1
+         bars - 2
       );
 
    if(maxBars < 1)
@@ -361,7 +503,7 @@ bool FindM5Rejection(
 
 
    //===============================================================
-   // Scan candles after OB creation.
+   // Scan newest closed candles first.
    //
    // shift 1 = latest closed M5 candle.
    //===============================================================
@@ -370,6 +512,27 @@ bool FindM5Rejection(
        shift <= maxBars;
        shift++)
    {
+      // Must be after OB creation.
+      if(!IsCandleAfterOB(
+            PERIOD_M5,
+            shift,
+            ob
+         ))
+      {
+         continue;
+      }
+
+
+      // Must also be after M5 structure confirmation.
+      if(!IsCandleAfterStructureConfirmation(
+            PERIOD_M5,
+            shift
+         ))
+      {
+         continue;
+      }
+
+
       if(!CandleTouchesOrderBlock(
             PERIOD_M5,
             shift,
@@ -380,8 +543,10 @@ bool FindM5Rejection(
          continue;
       }
 
+
       double wick = 0.0;
       double body = 0.0;
+
 
       if(!IsRejectionCandle(
             PERIOD_M5,
@@ -455,16 +620,61 @@ bool FindM1Rejection(
       return false;
 
 
-   //===============================================================
-   // Only inspect recent M1 candles.
-   //===============================================================
+   /*
+      M1 is an entry refinement.
 
-   int maxBars = 15;
+      It MUST happen after:
+
+         OB creation
+         M5 structure confirmation
+
+      Therefore an M1 rejection that occurred before
+      the confirmed M5 structure is ignored.
+   */
+
+
+   int bars =
+      Bars(
+         _Symbol,
+         PERIOD_M1
+      );
+
+   if(bars <= 2)
+      return false;
+
+
+   int maxBars =
+      MathMin(
+         30,
+         bars - 2
+      );
+
 
    for(int shift = 1;
        shift <= maxBars;
        shift++)
    {
+      // Must be after OB.
+      if(!IsCandleAfterOB(
+            PERIOD_M1,
+            shift,
+            ob
+         ))
+      {
+         continue;
+      }
+
+
+      // Must be after M5 structure confirmation.
+      if(!IsCandleAfterStructureConfirmation(
+            PERIOD_M1,
+            shift
+         ))
+      {
+         continue;
+      }
+
+
       if(!CandleTouchesOrderBlock(
             PERIOD_M1,
             shift,
@@ -475,8 +685,10 @@ bool FindM1Rejection(
          continue;
       }
 
+
       double wick = 0.0;
       double body = 0.0;
+
 
       if(!IsRejectionCandle(
             PERIOD_M1,
@@ -594,7 +806,10 @@ double CalculateEntryPrice(
       if(ask > 0.0)
          return ask;
 
-      return rejectionHigh;
+      if(rejectionHigh > 0.0)
+         return rejectionHigh;
+
+      return 0.0;
    }
 
 
@@ -603,7 +818,10 @@ double CalculateEntryPrice(
       if(bid > 0.0)
          return bid;
 
-      return rejectionLow;
+      if(rejectionLow > 0.0)
+         return rejectionLow;
+
+      return 0.0;
    }
 
    return 0.0;
@@ -628,7 +846,8 @@ double CalculateEntryTakeProfit(
 
    double risk =
       MathAbs(
-         entry - stopLoss
+         entry -
+         stopLoss
       );
 
    if(risk <= 0.0)
@@ -639,7 +858,8 @@ double CalculateEntryTakeProfit(
    {
       return (
          entry +
-         risk * InpEntryRiskReward
+         risk *
+         InpEntryRiskReward
       );
    }
 
@@ -648,7 +868,8 @@ double CalculateEntryTakeProfit(
    {
       return (
          entry -
-         risk * InpEntryRiskReward
+         risk *
+         InpEntryRiskReward
       );
    }
 
@@ -657,7 +878,7 @@ double CalculateEntryTakeProfit(
 
 
 //+------------------------------------------------------------------+
-//| Validate entry zone                                              |
+//| Validate Entry Zone                                              |
 //+------------------------------------------------------------------+
 
 bool ValidateEntryZone(
@@ -665,14 +886,17 @@ bool ValidateEntryZone(
    EntryConfirmationState &result
 )
 {
+   ZeroMemory(result);
+
    result.valid = false;
+
+
+   //===============================================================
+   // BASIC OB VALIDATION
+   //===============================================================
 
    if(!ob.valid)
       return false;
-
-   //===============================================================
-   // OB MUST STILL BE VALID
-   //===============================================================
 
    if(!ob.fresh)
       return false;
@@ -685,6 +909,37 @@ bool ValidateEntryZone(
 
    if(!ob.fvgNearOB)
       return false;
+
+
+   //===============================================================
+   // M5 STRUCTURE MUST STILL BE VALID
+   //===============================================================
+
+   if(!g_Structure.valid)
+      return false;
+
+   if(g_Structure.direction !=
+      ob.direction)
+   {
+      return false;
+   }
+
+   if(g_Structure.confirmationTime <= 0)
+      return false;
+
+
+   //===============================================================
+   // OB MUST EXIST BEFORE CONFIRMATION
+   //===============================================================
+
+   if(ob.createdTime <= 0)
+      return false;
+
+   if(ob.createdTime >=
+      g_Structure.confirmationTime)
+   {
+      return false;
+   }
 
 
    //===============================================================
@@ -704,14 +959,32 @@ bool ValidateEntryZone(
       );
 
    double currentPrice =
-      (bid + ask) * 0.5;
+      0.0;
+
+   if(bid > 0.0 &&
+      ask > 0.0)
+   {
+      currentPrice =
+         (bid + ask) *
+         0.5;
+   }
+   else
+   if(ob.direction == BIAS_BULLISH)
+   {
+      currentPrice = ask;
+   }
+   else
+   if(ob.direction == BIAS_BEARISH)
+   {
+      currentPrice = bid;
+   }
 
    if(currentPrice <= 0.0)
       return false;
 
 
    //===============================================================
-   // PRICE MUST HAVE RETURNED TO OB
+   // PRICE RETURNED TO OB
    //===============================================================
 
    bool priceInside =
@@ -721,7 +994,8 @@ bool ValidateEntryZone(
          ob.low
       );
 
-   bool m5Touched =
+
+   bool latestM5Touched =
       CandleTouchesOrderBlock(
          PERIOD_M5,
          1,
@@ -730,8 +1004,21 @@ bool ValidateEntryZone(
       );
 
 
+   /*
+      The setup needs evidence that price has actually
+      returned to the selected OB.
+
+      Either:
+
+         current price is inside OB
+
+      OR
+
+         latest closed M5 candle touched OB.
+   */
+
    if(!priceInside &&
-      !m5Touched)
+      !latestM5Touched)
    {
       return false;
    }
@@ -741,7 +1028,7 @@ bool ValidateEntryZone(
       priceInside;
 
    result.m5TouchedOB =
-      m5Touched;
+      latestM5Touched;
 
 
    //===============================================================
@@ -756,6 +1043,7 @@ bool ValidateEntryZone(
    datetime m5Time = 0;
 
    bool m5Rejected = false;
+
 
    if(InpUseM5EntryConfirmation)
    {
@@ -774,10 +1062,10 @@ bool ValidateEntryZone(
    //===============================================================
    // M1 REJECTION
    //
-   // Optional.
+   // M1 is OPTIONAL.
    //
-   // M1 confirmation can confirm the entry,
-   // but M1 is NOT required if M5 rejection is valid.
+   // It can refine the entry after M5 confirmation,
+   // but cannot create a setup before M5 structure exists.
    //===============================================================
 
    double m1High = 0.0;
@@ -788,6 +1076,7 @@ bool ValidateEntryZone(
    datetime m1Time = 0;
 
    bool m1Rejected = false;
+
 
    if(InpUseM1EntryConfirmation)
    {
@@ -836,7 +1125,10 @@ bool ValidateEntryZone(
 
 
    //===============================================================
-   // Select rejection candle information
+   // SELECT BEST CONFIRMATION CANDLE
+   //
+   // Prefer M5 confirmation.
+   // If M5 is unavailable, use M1.
    //===============================================================
 
    if(m5Rejected)
@@ -876,7 +1168,7 @@ bool ValidateEntryZone(
 
 
    //===============================================================
-   // ENTRY
+   // ENTRY PRICE
    //===============================================================
 
    result.entryPrice =
@@ -952,20 +1244,25 @@ bool ValidateEntryZone(
 
    result.score = 0;
 
+
    // Price returned to OB
    result.score += 30;
+
 
    // M5 rejection
    if(m5Rejected)
       result.score += 35;
 
-   // M1 rejection is additional confirmation
+
+   // M1 additional confirmation
    if(m1Rejected)
       result.score += 20;
+
 
    // Zone held
    if(result.zoneHeld)
       result.score += 15;
+
 
    if(result.score > 100)
       result.score = 100;
@@ -994,13 +1291,34 @@ void ScanEntryConfirmation(
 
    result.valid = false;
 
+
    if(!ob.valid)
+   {
+      g_Entry = result;
       return;
+   }
+
+
+   if(!g_Structure.valid)
+   {
+      g_Entry = result;
+      return;
+   }
+
+
+   if(g_Structure.direction !=
+      ob.direction)
+   {
+      g_Entry = result;
+      return;
+   }
+
 
    ValidateEntryZone(
       ob,
       result
    );
+
 
    g_Entry =
       result;
