@@ -1,65 +1,90 @@
 //+------------------------------------------------------------------+
 //| SMC_LOWTF_MAIN.mq5                                               |
-//| Main EA: Liquidity -> Structure -> OrderBlock -> Entry ->        |
-//|          Trade Manager -> Execution                              |
+//|                                                                  |
+//| Main EA Pipeline:                                                |
+//| Liquidity -> Structure -> Order Block -> Entry -> Execution      |
+//| -> Trade Manager -> Dashboard -> Chart Drawing                  |
 //+------------------------------------------------------------------+
 #property strict
 #property version   "1.00"
 #property description "SMC Low-TF main EA pipeline"
 
-// Core modules. Include guards inside the modules prevent duplicates.
+//+------------------------------------------------------------------+
+//| CORE MODULES                                                     |
+//+------------------------------------------------------------------+
+
 #include "Constants.mqh"
 #include "Structures.mqh"
+
 #include "LiquiditySweepEngine.mqh"
 #include "StructureEngine.mqh"
 #include "OrderBlockEngine.mqh"
 #include "EntryEngine.mqh"
+
 #include "TradeManager.mqh"
 #include "ExecutionEngine.mqh"
+
 #include "Dashboard.mqh"
 #include "ChartDrawing.mqh"
 
+
 //+------------------------------------------------------------------+
-//| Main EA settings                                                  |
+//| MAIN EA SETTINGS                                                 |
 //+------------------------------------------------------------------+
+
 input group "=== MAIN EA ==="
 
 input bool InpMainEAEnabled       = true;
 input bool InpScanOnNewM1Bar      = true;
+
 input bool InpDrawMainEAObjects   = true;
+
 input bool InpUseSetupLock        = true;
 input int  InpSetupLockMaxBars    = 100;
 
+
 //+------------------------------------------------------------------+
-//| Main pipeline state                                               |
+//| MAIN SETUP LOCK                                                  |
 //+------------------------------------------------------------------+
+
 struct MainSetupLock
 {
-   bool     active;
-   bool     traded;
-   ENUM_BIAS direction;
-   datetime liquidityTime;
-   datetime structureTime;
-   datetime obTime;
-   datetime entryTime;
+   bool       active;
+   bool       traded;
+
+   ENUM_BIAS  direction;
+
+   datetime   liquidityTime;
+   datetime   structureTime;
+   datetime   obTime;
+   datetime   entryTime;
 };
+
+
+//+------------------------------------------------------------------+
+//| GLOBAL MAIN STATE                                                |
+//+------------------------------------------------------------------+
 
 MainSetupLock g_MainLock;
 
 datetime g_LastM1Bar = 0;
 
+
 //+------------------------------------------------------------------+
-//| Reset main state                                                  |
+//| RESET MAIN STATE                                                 |
 //+------------------------------------------------------------------+
+
 void ResetMainState()
 {
    ZeroMemory(g_MainLock);
-   g_MainLock.active = false;
-   g_MainLock.traded = false;
+
+   g_MainLock.active    = false;
+   g_MainLock.traded    = false;
    g_MainLock.direction = BIAS_NONE;
 
    g_LastM1Bar = 0;
 
+   // Reset all engine states.
    ResetLiquidityEnvironment();
    ResetStructureState();
    ResetEntryState();
@@ -67,36 +92,62 @@ void ResetMainState()
    ResetTradeManagement();
 }
 
+
 //+------------------------------------------------------------------+
-//| Detect a new M1 bar                                               |
+//| NEW M1 BAR DETECTION                                             |
 //+------------------------------------------------------------------+
+
 bool IsNewM1Bar()
 {
-   datetime currentBar = iTime(_Symbol, PERIOD_M1, 0);
+   datetime currentBar =
+      iTime(
+         _Symbol,
+         PERIOD_M1,
+         0
+      );
 
    if(currentBar <= 0)
       return false;
 
+
+   // First initialization.
    if(g_LastM1Bar == 0)
    {
       g_LastM1Bar = currentBar;
+
       return true;
    }
 
+
+   // New M1 candle.
    if(currentBar != g_LastM1Bar)
    {
       g_LastM1Bar = currentBar;
+
       return true;
    }
+
 
    return false;
 }
 
+
 //+------------------------------------------------------------------+
-//| Setup identity                                                    |
-//| A setup is identified by direction + liquidity + structure + OB. |
-//| This prevents the EA from repeatedly entering the same setup.    |
+//| CHECK WHETHER SETUP IS THE SAME                                  |
 //+------------------------------------------------------------------+
+//
+// Setup identity:
+// direction
+// +
+// liquidity sweep
+// +
+// structure confirmation
+// +
+// order block creation
+//
+// This prevents the same setup from generating another entry.
+//
+
 bool IsSameSetup(
    ENUM_BIAS direction,
    datetime liquidityTime,
@@ -104,19 +155,34 @@ bool IsSameSetup(
    datetime obTime
 )
 {
-   if(!InpUseSetupLock || !g_MainLock.active)
+   if(!InpUseSetupLock)
       return false;
 
-   return
-      g_MainLock.direction     == direction &&
-      g_MainLock.liquidityTime == liquidityTime &&
-      g_MainLock.structureTime == structureTime &&
-      g_MainLock.obTime        == obTime;
+   if(!g_MainLock.active)
+      return false;
+
+
+   if(g_MainLock.direction != direction)
+      return false;
+
+   if(g_MainLock.liquidityTime != liquidityTime)
+      return false;
+
+   if(g_MainLock.structureTime != structureTime)
+      return false;
+
+   if(g_MainLock.obTime != obTime)
+      return false;
+
+
+   return true;
 }
 
+
 //+------------------------------------------------------------------+
-//| Save setup identity                                               |
+//| LOCK CURRENT SETUP                                               |
 //+------------------------------------------------------------------+
+
 void LockSetup(
    ENUM_BIAS direction,
    datetime liquidityTime,
@@ -125,74 +191,121 @@ void LockSetup(
    datetime entryTime
 )
 {
-   g_MainLock.active         = true;
-   g_MainLock.traded         = false;
-   g_MainLock.direction      = direction;
-   g_MainLock.liquidityTime  = liquidityTime;
-   g_MainLock.structureTime  = structureTime;
-   g_MainLock.obTime         = obTime;
-   g_MainLock.entryTime      = entryTime;
+   g_MainLock.active        = true;
+   g_MainLock.traded        = false;
+
+   g_MainLock.direction     = direction;
+
+   g_MainLock.liquidityTime = liquidityTime;
+   g_MainLock.structureTime = structureTime;
+   g_MainLock.obTime        = obTime;
+   g_MainLock.entryTime     = entryTime;
 }
 
+
 //+------------------------------------------------------------------+
-//| Expire old setup lock                                             |
+//| EXPIRE OLD SETUP LOCK                                            |
 //+------------------------------------------------------------------+
+
 void ExpireSetupLock()
 {
+   if(!InpUseSetupLock)
+      return;
+
    if(!g_MainLock.active)
       return;
 
-   datetime now = TimeCurrent();
 
-   datetime anchor = g_MainLock.entryTime;
+   datetime now =
+      TimeCurrent();
+
+
+   //===============================================================
+   // Find best setup anchor.
+   //===============================================================
+
+   datetime anchor =
+      g_MainLock.entryTime;
+
+
    if(anchor <= 0)
       anchor = g_MainLock.obTime;
+
    if(anchor <= 0)
       anchor = g_MainLock.structureTime;
+
    if(anchor <= 0)
       anchor = g_MainLock.liquidityTime;
+
 
    if(anchor <= 0)
       return;
 
-   int shift = iBarShift(
-      _Symbol,
-      PERIOD_M1,
-      anchor,
-      false
-   );
+
+   //===============================================================
+   // M1 BAR AGE
+   //===============================================================
+
+   int shift =
+      iBarShift(
+         _Symbol,
+         PERIOD_M1,
+         anchor,
+         false
+      );
+
 
    if(shift >= InpSetupLockMaxBars)
    {
       g_MainLock.active = false;
       g_MainLock.traded = false;
+
+      return;
    }
 
-   // Absolute time fallback for unusual history gaps.
-   if((now - anchor) > (InpSetupLockMaxBars * 60))
+
+   //===============================================================
+   // ABSOLUTE TIME FALLBACK
+   //===============================================================
+
+   int maxSeconds =
+      InpSetupLockMaxBars * 60;
+
+
+   if((now - anchor) > maxSeconds)
    {
       g_MainLock.active = false;
       g_MainLock.traded = false;
+
+      return;
    }
 }
 
+
 //+------------------------------------------------------------------+
-//| Run the complete setup pipeline                                  |
+//| RUN COMPLETE SETUP PIPELINE                                      |
 //+------------------------------------------------------------------+
+
 void RunSetupPipeline()
 {
    if(!InpMainEAEnabled)
       return;
 
+
    //===============================================================
    // 1. LIQUIDITY
    //===============================================================
+
    ScanLiquidity();
+
 
    if(!g_Liquidity.valid)
       return;
 
-   ENUM_BIAS direction = g_Liquidity.direction;
+
+   ENUM_BIAS direction =
+      g_Liquidity.direction;
+
 
    if(direction != BIAS_BULLISH &&
       direction != BIAS_BEARISH)
@@ -200,10 +313,13 @@ void RunSetupPipeline()
       return;
    }
 
+
    //===============================================================
-   // 2. STRUCTURE ENGINE
+   // 2. M5 STRUCTURE
    //===============================================================
+
    ResetStructureState();
+
 
    ScanM5Structure(
       direction,
@@ -211,32 +327,46 @@ void RunSetupPipeline()
       g_Structure
    );
 
+
    if(!g_Structure.valid)
       return;
 
+
    //===============================================================
-   // 3. ORDER BLOCK ENGINE
+   // 3. ORDER BLOCK
    //===============================================================
+
    ResetEntryState();
+
 
    ScanOrderBlock(
       direction,
-   g_Liquidity.direction,
-   g_Liquidity,
-   g_Structure,
-   g_OrderBlock
-);
+      g_Liquidity.direction,
+      g_Liquidity,
+      g_Structure,
+      g_OrderBlock
+   );
+
 
    if(!g_OrderBlock.valid)
       return;
 
+
    if(!HasValidOrderBlock())
       return;
 
+
    //===============================================================
-   // Setup lock is checked after OB because the OB is part of the
-   // unique setup identity.
+   // SETUP LOCK
    //===============================================================
+   //
+   // The setup is checked only after the OB exists because:
+   //
+   // Liquidity + Structure + OB
+   //
+   // together define the setup identity.
+   //
+
    if(IsSameSetup(
          direction,
          g_Liquidity.sweepTime,
@@ -247,21 +377,31 @@ void RunSetupPipeline()
       return;
    }
 
+
    //===============================================================
-   // 4. ENTRY ENGINE
+   // 4. ENTRY CONFIRMATION
    //===============================================================
+
    ScanEntryConfirmation(
       g_OrderBlock,
       g_Entry
    );
 
+
    if(!g_Entry.valid)
       return;
 
+
    //===============================================================
-   // Lock before sending the order. This prevents duplicate orders
-   // if the terminal receives multiple ticks around execution.
+   // LOCK SETUP BEFORE EXECUTION
    //===============================================================
+   //
+   // Lock BEFORE sending the order.
+   //
+   // This protects against multiple ticks or execution callbacks
+   // causing the same setup to fire more than once.
+   //
+
    LockSetup(
       direction,
       g_Liquidity.sweepTime,
@@ -270,127 +410,275 @@ void RunSetupPipeline()
       g_Entry.confirmationTime
    );
 
+
    //===============================================================
-   // 5. EXECUTION ENGINE
+   // 5. EXECUTION
    //===============================================================
+
    if(!InpEnableTrading)
       return;
 
-   if(!ExecuteValidatedTrade(
+
+   bool executionResult =
+      ExecuteValidatedTrade(
          direction,
          g_Entry.stopLoss,
          g_Entry.takeProfit
-      ))
+      );
+
+
+   //===============================================================
+   // EXECUTION FAILED
+   //===============================================================
+
+   if(!executionResult)
    {
-      // The setup remains locked for this setup identity, but it is
-      // not marked traded. A later fresh setup can still trade.
       g_MainLock.traded = false;
+
       return;
    }
 
+
+   //===============================================================
+   // EXECUTION SUCCESS
+   //===============================================================
+
    g_MainLock.traded = true;
 
+
    //===============================================================
-   // 6. TRADE MANAGER
+   // 6. INITIALIZE TRADE MANAGER
    //===============================================================
-   ulong ticket = g_Execution.positionTicket;
 
-   if(ticket > 0 &&
-      PositionSelectByTicket(ticket))
-   {
-      double actualEntry =
-         PositionGetDouble(POSITION_PRICE_OPEN);
+   ulong ticket =
+      g_Execution.positionTicket;
 
-      double actualSL =
-         PositionGetDouble(POSITION_SL);
 
-      if(actualSL <= 0.0)
-         actualSL = g_Entry.stopLoss;
+   if(ticket <= 0)
+      return;
 
-      InitializeTradeManagement(
-         ticket,
-         direction,
-         actualEntry,
-         actualSL
+
+   if(!PositionSelectByTicket(ticket))
+      return;
+
+
+   double actualEntry =
+      PositionGetDouble(
+         POSITION_PRICE_OPEN
       );
-   }
+
+
+   double actualSL =
+      PositionGetDouble(
+         POSITION_SL
+      );
+
+
+   // If broker/execution did not return SL,
+   // fall back to validated entry SL.
+   if(actualSL <= 0.0)
+      actualSL = g_Entry.stopLoss;
+
+
+   InitializeTradeManagement(
+      ticket,
+      direction,
+      actualEntry,
+      actualSL
+   );
 }
 
+
 //+------------------------------------------------------------------+
-//| Update management and UI                                          |
+//| UPDATE LIVE EA STATE                                             |
 //+------------------------------------------------------------------+
+//
+// This function runs EVERY TICK.
+//
+// Important:
+// Trade management must NEVER be restricted to the M1 new-bar
+// condition because BE, trailing, protection and exit management
+// require live tick updates.
+//
+
 void UpdateEA()
 {
-   // Trade management MUST run on every tick. Do not put this
-   // behind the new-bar filter; trailing/BE/lock logic needs ticks.
+   //===============================================================
+   // TRADE MANAGEMENT
+   //===============================================================
+
    UpdateTradeManagement();
+
    CleanupTradeManagement();
+
+
+   //===============================================================
+   // DASHBOARD
+   //===============================================================
 
    if(InpShowDashboard)
       UpdateDashboard();
 
+
+   //===============================================================
+   // CHART DRAWING
+   //===============================================================
+
    if(InpDrawMainEAObjects)
       UpdateChartDrawings();
+
+
+   //===============================================================
+   // SETUP LOCK EXPIRATION
+   //===============================================================
 
    ExpireSetupLock();
 }
 
+
 //+------------------------------------------------------------------+
-//| Expert initialization                                             |
+//| EXPERT INITIALIZATION                                            |
 //+------------------------------------------------------------------+
+
 int OnInit()
 {
+   //===============================================================
+   // RESET ALL STATE
+   //===============================================================
+
    ResetMainState();
+
+
+   //===============================================================
+   // EXECUTION ENGINE
+   //===============================================================
 
    InitializeExecutionEngine();
 
+
+   //===============================================================
+   // DASHBOARD
+   //===============================================================
+
    InitializeDashboard();
+
+
+   //===============================================================
+   // CHART DRAWING
+   //===============================================================
+
    InitializeChartDrawing();
 
-   return(INIT_SUCCEEDED);
+
+   //===============================================================
+   // INITIAL M1 BAR
+   //===============================================================
+
+   g_LastM1Bar =
+      iTime(
+         _Symbol,
+         PERIOD_M1,
+         0
+      );
+
+
+   return INIT_SUCCEEDED;
 }
 
+
 //+------------------------------------------------------------------+
-//| Expert deinitialization                                           |
+//| EXPERT DEINITIALIZATION                                          |
 //+------------------------------------------------------------------+
-void OnDeinit(const int reason)
+
+void OnDeinit(
+   const int reason
+)
 {
+   //===============================================================
+   // DASHBOARD
+   //===============================================================
+
    ShutdownDashboard();
+
+
+   //===============================================================
+   // CHART DRAWING
+   //===============================================================
+
    ReleaseChartDrawing();
+
+
+   //===============================================================
+   // TRADE MANAGEMENT
+   //===============================================================
 
    ResetTradeManagement();
 }
 
+
 //+------------------------------------------------------------------+
-//| Expert tick                                                       |
+//| EXPERT TICK                                                      |
 //+------------------------------------------------------------------+
+
 void OnTick()
 {
-   if(!InpMainEAEnabled)
-   {
-      UpdateEA();
-      return;
-   }
+   //===============================================================
+   // LIVE MANAGEMENT/UI
+   //===============================================================
+   //
+   // This ALWAYS runs first.
+   //
+   // Even when the setup scanner is disabled or waiting for a new
+   // M1 candle, existing trades continue to be managed.
+   //
 
-   // Management/UI are always live.
    UpdateEA();
 
-   // Setup detection is intentionally throttled to M1 bar opens.
-   // This keeps the engine from opening repeated trades on every tick
-   // while still allowing M1 confirmation to be processed promptly.
+
+   //===============================================================
+   // MAIN EA DISABLED
+   //===============================================================
+
+   if(!InpMainEAEnabled)
+      return;
+
+
+   //===============================================================
+   // NEW M1 BAR FILTER
+   //===============================================================
+
    bool runScan = true;
+
 
    if(InpScanOnNewM1Bar)
       runScan = IsNewM1Bar();
 
+
    if(!runScan)
       return;
 
-   // Never create a second EA position when one is already active.
-   if(InpOnePositionOnly && HasOpenPosition())
+
+   //===============================================================
+   // ONLY ONE EA POSITION
+   //===============================================================
+   //
+   // Never allow a second position while the current EA position
+   // is still active.
+   //
+
+   if(InpOnePositionOnly &&
+      HasOpenPosition())
+   {
       return;
+   }
+
+
+   //===============================================================
+   // RUN SETUP PIPELINE
+   //===============================================================
 
    RunSetupPipeline();
-   
-   
 }
+
+
+//+------------------------------------------------------------------+
