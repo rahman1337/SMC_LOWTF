@@ -221,9 +221,11 @@ void RunSetupPipeline()
 
    ScanOrderBlock(
       direction,
-      g_Structure,
-      g_OrderBlock
-   );
+   g_Liquidity.direction,
+   g_Liquidity,
+   g_Structure,
+   g_OrderBlock
+);
 
    if(!g_OrderBlock.valid)
       return;
