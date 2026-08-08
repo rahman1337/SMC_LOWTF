@@ -1,6 +1,6 @@
 
-#ifndef SCALPINGEA_TRADE_MANAGEMENT_MQH
-#define SCALPINGEA_TRADE_MANAGEMENT_MQH
+#ifndef SCALPINGEA_TRADE_MANAGER_MQH
+#define SCALPINGEA_TRADE_MANAGER_MQH
 
 #include "Constants.mqh"
 #include "Structures.mqh"
