@@ -1,4 +1,3 @@
-
 #ifndef SCALPINGEA_TRADE_MANAGER_MQH
 #define SCALPINGEA_TRADE_MANAGER_MQH
 
@@ -7,6 +6,7 @@
 #include <Trade/Trade.mqh>
 
 CTrade g_Trade;
+
 
 //+------------------------------------------------------------------+
 //| Trade Management Settings                                        |
@@ -55,15 +55,11 @@ struct TradeManagementState
 };
 
 
-//+------------------------------------------------------------------+
-//| Global Trade Management State                                    |
-//+------------------------------------------------------------------+
-
 TradeManagementState g_TradeManagement;
 
 
 //+------------------------------------------------------------------+
-//| Reset Trade Management                                           |
+//| Reset                                                            |
 //+------------------------------------------------------------------+
 
 void ResetTradeManagement()
@@ -76,7 +72,28 @@ void ResetTradeManagement()
 
 
 //+------------------------------------------------------------------+
-//| Check Position Belongs To This EA                                |
+//| Normalize Trade Price                                            |
+//+------------------------------------------------------------------+
+
+double NormalizeTradePrice(
+   double price
+)
+{
+   int digits =
+      (int)SymbolInfoInteger(
+         _Symbol,
+         SYMBOL_DIGITS
+      );
+
+   return NormalizeDouble(
+      price,
+      digits
+   );
+}
+
+
+//+------------------------------------------------------------------+
+//| Check EA Position                                                |
 //+------------------------------------------------------------------+
 
 bool IsEAPositionByTicket(
@@ -89,10 +106,7 @@ bool IsEAPositionByTicket(
    if(!PositionSelectByTicket(ticket))
       return false;
 
-   string symbol =
-      PositionGetString(POSITION_SYMBOL);
-
-   if(symbol != _Symbol)
+   if(PositionGetString(POSITION_SYMBOL) != _Symbol)
       return false;
 
    ulong magic =
@@ -108,7 +122,7 @@ bool IsEAPositionByTicket(
 
 
 //+------------------------------------------------------------------+
-//| Find EA Position Ticket                                          |
+//| Find EA Position                                                 |
 //+------------------------------------------------------------------+
 
 ulong FindEAPositionTicket()
@@ -126,12 +140,7 @@ ulong FindEAPositionTicket()
       if(!PositionSelectByTicket(ticket))
          continue;
 
-      string symbol =
-         PositionGetString(
-            POSITION_SYMBOL
-         );
-
-      if(symbol != _Symbol)
+      if(PositionGetString(POSITION_SYMBOL) != _Symbol)
          continue;
 
       ulong magic =
@@ -150,7 +159,7 @@ ulong FindEAPositionTicket()
 
 
 //+------------------------------------------------------------------+
-//| Detect Position Direction                                        |
+//| Get Position Direction                                           |
 //+------------------------------------------------------------------+
 
 ENUM_BIAS GetPositionBias()
@@ -191,13 +200,19 @@ double CalculateRPrice(
    double r
 )
 {
+   if(entry <= 0.0 ||
+      risk <= 0.0)
+   {
+      return 0.0;
+   }
+
    if(direction == BIAS_BULLISH)
       return entry + (risk * r);
 
    if(direction == BIAS_BEARISH)
       return entry - (risk * r);
 
-   return entry;
+   return 0.0;
 }
 
 
@@ -212,8 +227,12 @@ double CalculateCurrentR(
    double price
 )
 {
-   if(risk <= 0.0)
+   if(entry <= 0.0 ||
+      risk <= 0.0 ||
+      price <= 0.0)
+   {
       return 0.0;
+   }
 
    if(direction == BIAS_BULLISH)
       return (price - entry) / risk;
@@ -222,88 +241,6 @@ double CalculateCurrentR(
       return (entry - price) / risk;
 
    return 0.0;
-}
-
-
-//+------------------------------------------------------------------+
-//| Initialize Trade Management                                     |
-//+------------------------------------------------------------------+
-
-bool InitializeTradeManagement(
-   ulong ticket,
-   ENUM_BIAS direction,
-   double entryPrice,
-   double stopLoss
-)
-{
-   if(ticket == 0)
-      return false;
-
-   if(direction == BIAS_NONE)
-      return false;
-
-   if(entryPrice <= 0.0 ||
-      stopLoss <= 0.0)
-   {
-      return false;
-   }
-
-   if(!IsEAPositionByTicket(ticket))
-      return false;
-
-   double risk =
-      MathAbs(
-         entryPrice - stopLoss
-      );
-
-   if(risk <= 0.0)
-      return false;
-
-   g_TradeManagement.active =
-      true;
-
-   g_TradeManagement.ticket =
-      ticket;
-
-   g_TradeManagement.direction =
-      direction;
-
-   g_TradeManagement.entryPrice =
-      entryPrice;
-
-   g_TradeManagement.initialSL =
-      stopLoss;
-
-   g_TradeManagement.currentSL =
-      stopLoss;
-
-   g_TradeManagement.riskDistance =
-      risk;
-
-   g_TradeManagement.takeProfit =
-      CalculateRPrice(
-         direction,
-         entryPrice,
-         risk,
-         InpRiskRewardTP
-      );
-
-   g_TradeManagement.currentR =
-      0.0;
-
-   g_TradeManagement.breakEvenDone =
-      false;
-
-   g_TradeManagement.lockR1Done =
-      false;
-
-   g_TradeManagement.lockR15Done =
-      false;
-
-   g_TradeManagement.lockR2Done =
-      false;
-
-   return true;
 }
 
 
@@ -348,28 +285,7 @@ bool IsValidTPForDirection(
 
 
 //+------------------------------------------------------------------+
-//| Normalize Trade Price                                            |
-//+------------------------------------------------------------------+
-
-double NormalizeTradePrice(
-   double price
-)
-{
-   int digits =
-      (int)SymbolInfoInteger(
-         _Symbol,
-         SYMBOL_DIGITS
-      );
-
-   return NormalizeDouble(
-      price,
-      digits
-   );
-}
-
-
-//+------------------------------------------------------------------+
-//| Check Broker Stop Distance                                       |
+//| Broker Stop Distance                                             |
 //+------------------------------------------------------------------+
 
 bool IsStopDistanceValid(
@@ -389,16 +305,16 @@ bool IsStopDistanceValid(
          SYMBOL_ASK
       );
 
-   long stopsLevel =
-      SymbolInfoInteger(
-         _Symbol,
-         SYMBOL_TRADE_STOPS_LEVEL
-      );
-
    double point =
       SymbolInfoDouble(
          _Symbol,
          SYMBOL_POINT
+      );
+
+   long stopsLevel =
+      SymbolInfoInteger(
+         _Symbol,
+         SYMBOL_TRADE_STOPS_LEVEL
       );
 
    if(bid <= 0.0 ||
@@ -411,32 +327,28 @@ bool IsStopDistanceValid(
    double minimumDistance =
       stopsLevel * point;
 
-   // BUY SL is evaluated from BID.
+
+   // BUY SL is measured from BID.
    if(direction == BIAS_BULLISH)
    {
       if(stopLoss >= bid)
          return false;
 
-      if((bid - stopLoss) <
-         minimumDistance)
-      {
+      if((bid - stopLoss) < minimumDistance)
          return false;
-      }
 
       return true;
    }
 
-   // SELL SL is evaluated from ASK.
+
+   // SELL SL is measured from ASK.
    if(direction == BIAS_BEARISH)
    {
       if(stopLoss <= ask)
          return false;
 
-      if((stopLoss - ask) <
-         minimumDistance)
-      {
+      if((stopLoss - ask) < minimumDistance)
          return false;
-      }
 
       return true;
    }
@@ -446,7 +358,143 @@ bool IsStopDistanceValid(
 
 
 //+------------------------------------------------------------------+
-//| Modify Specific Position Stops                                   |
+//| Initialize From Actual Position                                  |
+//+------------------------------------------------------------------+
+
+bool InitializeTradeManagement(
+   ulong ticket
+)
+{
+   if(ticket == 0)
+      return false;
+
+   if(!IsEAPositionByTicket(ticket))
+      return false;
+
+   if(!PositionSelectByTicket(ticket))
+      return false;
+
+
+   ENUM_POSITION_TYPE type =
+      (ENUM_POSITION_TYPE)
+      PositionGetInteger(
+         POSITION_TYPE
+      );
+
+   ENUM_BIAS direction =
+      BIAS_NONE;
+
+   if(type == POSITION_TYPE_BUY)
+      direction = BIAS_BULLISH;
+
+   else
+   if(type == POSITION_TYPE_SELL)
+      direction = BIAS_BEARISH;
+
+   else
+      return false;
+
+
+   double entry =
+      PositionGetDouble(
+         POSITION_PRICE_OPEN
+      );
+
+   double sl =
+      PositionGetDouble(
+         POSITION_SL
+      );
+
+   double tp =
+      PositionGetDouble(
+         POSITION_TP
+      );
+
+
+   if(entry <= 0.0 ||
+      sl <= 0.0)
+   {
+      return false;
+   }
+
+
+   double risk =
+      MathAbs(
+         entry - sl
+      );
+
+   if(risk <= 0.0)
+      return false;
+
+
+   g_TradeManagement.active =
+      true;
+
+   g_TradeManagement.ticket =
+      ticket;
+
+   g_TradeManagement.direction =
+      direction;
+
+   g_TradeManagement.entryPrice =
+      entry;
+
+   g_TradeManagement.initialSL =
+      sl;
+
+   g_TradeManagement.currentSL =
+      sl;
+
+   g_TradeManagement.riskDistance =
+      risk;
+
+   // Prefer actual broker TP.
+   if(tp > 0.0)
+   {
+      g_TradeManagement.takeProfit =
+         tp;
+   }
+   else
+   {
+      g_TradeManagement.takeProfit =
+         CalculateRPrice(
+            direction,
+            entry,
+            risk,
+            InpRiskRewardTP
+         );
+   }
+
+   g_TradeManagement.currentR = 0.0;
+
+   g_TradeManagement.breakEvenDone = false;
+   g_TradeManagement.lockR1Done = false;
+   g_TradeManagement.lockR15Done = false;
+   g_TradeManagement.lockR2Done = false;
+
+
+   Print(
+      "TradeManager initialized | ",
+      "Ticket=",
+      ticket,
+      " | Direction=",
+      direction == BIAS_BULLISH ? "BUY" : "SELL",
+      " | Entry=",
+      entry,
+      " | SL=",
+      sl,
+      " | TP=",
+      g_TradeManagement.takeProfit,
+      " | Risk=",
+      risk
+   );
+
+   return true;
+}
+
+
+//+------------------------------------------------------------------+
+//| Modify Position Stops                                            |
 //+------------------------------------------------------------------+
 
 bool ModifyPositionStops(
@@ -473,6 +521,7 @@ bool ModifyPositionStops(
          newTP
       );
 
+
    if(!IsValidStopForDirection(
          g_TradeManagement.direction,
          newSL,
@@ -482,7 +531,9 @@ bool ModifyPositionStops(
       return false;
    }
 
-   if(!IsValidTPForDirection(
+
+   if(newTP > 0.0 &&
+      !IsValidTPForDirection(
          g_TradeManagement.direction,
          newTP,
          g_TradeManagement.entryPrice
@@ -490,6 +541,7 @@ bool ModifyPositionStops(
    {
       return false;
    }
+
 
    if(!IsStopDistanceValid(
          g_TradeManagement.direction,
@@ -499,6 +551,7 @@ bool ModifyPositionStops(
       return false;
    }
 
+
    if(!g_Trade.PositionModify(
          ticket,
          newSL,
@@ -506,7 +559,7 @@ bool ModifyPositionStops(
       ))
    {
       Print(
-         "TradeManagement: PositionModify failed. ",
+         "TradeManager: PositionModify failed | ",
          "Ticket=",
          ticket,
          " | Retcode=",
@@ -517,6 +570,26 @@ bool ModifyPositionStops(
 
       return false;
    }
+
+
+   uint retcode =
+      g_Trade.ResultRetcode();
+
+
+   if(retcode != TRADE_RETCODE_DONE &&
+      retcode != TRADE_RETCODE_DONE_PARTIAL)
+   {
+      Print(
+         "TradeManager: SL modification rejected | ",
+         "Retcode=",
+         retcode,
+         " | ",
+         g_Trade.ResultRetcodeDescription()
+      );
+
+      return false;
+   }
+
 
    return true;
 }
@@ -534,6 +607,7 @@ bool MoveSLToBreakeven()
    double newSL =
       g_TradeManagement.entryPrice;
 
+
    if(!ModifyPositionStops(
          newSL,
          g_TradeManagement.takeProfit
@@ -542,15 +616,18 @@ bool MoveSLToBreakeven()
       return false;
    }
 
+
    g_TradeManagement.currentSL =
       newSL;
 
    g_TradeManagement.breakEvenDone =
       true;
 
+
    Print(
-      "TradeManagement: ",
-      "R0.5 reached -> SL moved to BE."
+      "TradeManager: R0.5 reached -> SL moved to BE | ",
+      "Ticket=",
+      g_TradeManagement.ticket
    );
 
    return true;
@@ -582,15 +659,18 @@ bool MoveSLToR1()
       return false;
    }
 
+
    g_TradeManagement.currentSL =
       newSL;
 
    g_TradeManagement.lockR1Done =
       true;
 
+
    Print(
-      "TradeManagement: ",
-      "R1.5 reached -> SL moved to R1."
+      "TradeManager: R1.5 reached -> SL moved to R1 | ",
+      "Ticket=",
+      g_TradeManagement.ticket
    );
 
    return true;
@@ -622,15 +702,18 @@ bool MoveSLToR15()
       return false;
    }
 
+
    g_TradeManagement.currentSL =
       newSL;
 
    g_TradeManagement.lockR15Done =
       true;
 
+
    Print(
-      "TradeManagement: ",
-      "R2.0 reached -> SL moved to R1.5."
+      "TradeManager: R2.0 reached -> SL moved to R1.5 | ",
+      "Ticket=",
+      g_TradeManagement.ticket
    );
 
    return true;
@@ -662,15 +745,18 @@ bool MoveSLToR2()
       return false;
    }
 
+
    g_TradeManagement.currentSL =
       newSL;
 
    g_TradeManagement.lockR2Done =
       true;
 
+
    Print(
-      "TradeManagement: ",
-      "R2.5 reached -> SL moved to R2."
+      "TradeManager: R2.5 reached -> SL moved to R2 | ",
+      "Ticket=",
+      g_TradeManagement.ticket
    );
 
    return true;
@@ -686,8 +772,10 @@ void ManageActiveTrade()
    if(!g_TradeManagement.active)
       return;
 
+
    ulong ticket =
       g_TradeManagement.ticket;
+
 
    if(!IsEAPositionByTicket(ticket))
    {
@@ -695,8 +783,10 @@ void ManageActiveTrade()
       return;
    }
 
+
    if(!PositionSelectByTicket(ticket))
       return;
+
 
    double bid =
       SymbolInfoDouble(
@@ -710,14 +800,17 @@ void ManageActiveTrade()
          SYMBOL_ASK
       );
 
+
    double price =
       g_TradeManagement.direction ==
       BIAS_BULLISH
       ? bid
       : ask;
 
+
    if(price <= 0.0)
       return;
+
 
    g_TradeManagement.currentR =
       CalculateCurrentR(
@@ -726,6 +819,7 @@ void ManageActiveTrade()
          g_TradeManagement.riskDistance,
          price
       );
+
 
    double currentR =
       g_TradeManagement.currentR;
@@ -777,7 +871,7 @@ void ManageActiveTrade()
 
 
 //+------------------------------------------------------------------+
-//| Detect New EA Position                                           |
+//| Detect And Initialize Existing EA Position                       |
 //+------------------------------------------------------------------+
 
 bool DetectAndInitializeTrade()
@@ -785,13 +879,11 @@ bool DetectAndInitializeTrade()
    ulong ticket =
       FindEAPositionTicket();
 
+
    if(ticket == 0)
       return false;
 
-   if(!PositionSelectByTicket(ticket))
-      return false;
 
-   // Already initialized.
    if(g_TradeManagement.active &&
       g_TradeManagement.ticket == ticket)
    {
@@ -799,117 +891,9 @@ bool DetectAndInitializeTrade()
    }
 
 
-   ENUM_POSITION_TYPE type =
-      (ENUM_POSITION_TYPE)
-      PositionGetInteger(
-         POSITION_TYPE
-      );
-
-   ENUM_BIAS direction =
-      BIAS_NONE;
-
-   if(type == POSITION_TYPE_BUY)
-      direction = BIAS_BULLISH;
-
-   else
-   if(type == POSITION_TYPE_SELL)
-      direction = BIAS_BEARISH;
-
-   else
-      return false;
-
-
-   double entry =
-      PositionGetDouble(
-         POSITION_PRICE_OPEN
-      );
-
-   double sl =
-      PositionGetDouble(
-         POSITION_SL
-      );
-
-   double tp =
-      PositionGetDouble(
-         POSITION_TP
-      );
-
-   if(entry <= 0.0 ||
-      sl <= 0.0)
-   {
-      return false;
-   }
-
-
-   if(!InitializeTradeManagement(
-         ticket,
-         direction,
-         entry,
-         sl
-      ))
-   {
-      return false;
-   }
-
-
-   //===============================================================
-   // Trade Manager uses fixed R3 TP.
-   //===============================================================
-
-   double fixedTP =
-      g_TradeManagement.takeProfit;
-
-   if(tp <= 0.0 ||
-      MathAbs(
-         tp - fixedTP
-      ) >
-      SymbolInfoDouble(
-         _Symbol,
-         SYMBOL_POINT
-      ))
-   {
-      if(IsValidTPForDirection(
-            direction,
-            fixedTP,
-            entry
-         ))
-      {
-         if(IsStopDistanceValid(
-               direction,
-               sl
-            ))
-         {
-            g_Trade.PositionModify(
-               ticket,
-               sl,
-               NormalizeTradePrice(
-                  fixedTP
-               )
-            );
-         }
-      }
-   }
-
-
-   g_TradeManagement.takeProfit =
-      fixedTP;
-
-
-   Print(
-      "TradeManagement initialized | ",
-      "Ticket=",
-      ticket,
-      " | Entry=",
-      entry,
-      " | Initial SL=",
-      sl,
-      " | Fixed TP R3=",
-      fixedTP,
-      " | Risk=",
-      g_TradeManagement.riskDistance
+   return InitializeTradeManagement(
+      ticket
    );
-
-   return true;
 }
 
 
@@ -921,15 +905,17 @@ void UpdateTradeManagement()
 {
    if(!g_TradeManagement.active)
    {
-      DetectAndInitializeTrade();
+      if(!DetectAndInitializeTrade())
+         return;
    }
+
 
    ManageActiveTrade();
 }
 
 
 //+------------------------------------------------------------------+
-//| Check Trade Management Active                                    |
+//| Check Active                                                     |
 //+------------------------------------------------------------------+
 
 bool IsTradeManagementActive()
@@ -957,22 +943,54 @@ double GetManagedTradeR()
 
 
 //+------------------------------------------------------------------+
-//| Get Current Managed SL                                           |
+//| Get Current SL                                                   |
 //+------------------------------------------------------------------+
 
 double GetManagedTradeSL()
 {
+   if(!g_TradeManagement.active)
+      return 0.0;
+
    return g_TradeManagement.currentSL;
 }
 
 
 //+------------------------------------------------------------------+
-//| Get Managed TP                                                   |
+//| Get TP                                                           |
 //+------------------------------------------------------------------+
 
 double GetManagedTradeTP()
 {
+   if(!g_TradeManagement.active)
+      return 0.0;
+
    return g_TradeManagement.takeProfit;
+}
+
+
+//+------------------------------------------------------------------+
+//| Get Entry                                                        |
+//+------------------------------------------------------------------+
+
+double GetManagedTradeEntry()
+{
+   if(!g_TradeManagement.active)
+      return 0.0;
+
+   return g_TradeManagement.entryPrice;
+}
+
+
+//+------------------------------------------------------------------+
+//| Get Ticket                                                        |
+//+------------------------------------------------------------------+
+
+ulong GetManagedTradeTicket()
+{
+   if(!g_TradeManagement.active)
+      return 0;
+
+   return g_TradeManagement.ticket;
 }
 
 
@@ -982,15 +1000,29 @@ double GetManagedTradeTP()
 
 void CleanupTradeManagement()
 {
-   if(g_TradeManagement.active)
+   if(!g_TradeManagement.active)
+      return;
+
+
+   if(IsEAPositionByTicket(
+         g_TradeManagement.ticket
+      ))
    {
-      if(IsEAPositionByTicket(
-            g_TradeManagement.ticket
-         ))
-      {
-         return;
-      }
+      return;
    }
+
+
+   Print(
+      "TradeManager: Position closed | ",
+      "Ticket=",
+      g_TradeManagement.ticket,
+      " | Final R=",
+      DoubleToString(
+         g_TradeManagement.currentR,
+         2
+      )
+   );
+
 
    ResetTradeManagement();
 }
@@ -999,4 +1031,3 @@ void CleanupTradeManagement()
 //+------------------------------------------------------------------+
 
 #endif
-
