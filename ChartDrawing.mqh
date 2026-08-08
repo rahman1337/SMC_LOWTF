@@ -5,6 +5,7 @@
 #include "Structures.mqh"
 #include "StructureEngine.mqh"
 #include "OrderBlockEngine.mqh"
+#include "EntryEngine.mqh"
 
 //+------------------------------------------------------------------+
 //| CHART DRAWING SETTINGS                                           |
@@ -17,7 +18,6 @@ input bool InpDrawStructure        = true;
 input bool InpDrawOrderBlock       = true;
 input bool InpDrawFVG              = true;
 input bool InpDrawEntry            = true;
-input bool InpDrawDashboard        = true;
 
 input bool InpDrawOnlyCurrentSetup = true;
 
@@ -29,13 +29,13 @@ input int  InpFVGRectangleBars     = 20;
 input bool InpDrawPriceLabels      = true;
 
 //+------------------------------------------------------------------+
-//| Object Prefix                                                     |
+//| PREFIX                                                           |
 //+------------------------------------------------------------------+
 
 #define DRAW_PREFIX "SCALPINGEA_"
 
 //+------------------------------------------------------------------+
-//| Object Names                                                      |
+//| OBJECT NAMES                                                      |
 //+------------------------------------------------------------------+
 
 #define OBJ_LIQUIDITY_LINE       DRAW_PREFIX "LIQUIDITY_LINE"
@@ -59,57 +59,68 @@ input bool InpDrawPriceLabels      = true;
 #define OBJ_SL_LABEL             DRAW_PREFIX "SL_LABEL"
 #define OBJ_TP_LABEL             DRAW_PREFIX "TP_LABEL"
 
-#define OBJ_DASHBOARD_BG         DRAW_PREFIX "DASH_BG"
-#define OBJ_DASHBOARD_TITLE      DRAW_PREFIX "DASH_TITLE"
-#define OBJ_DASHBOARD_LIQ        DRAW_PREFIX "DASH_LIQ"
-#define OBJ_DASHBOARD_STRUCTURE  DRAW_PREFIX "DASH_STRUCTURE"
-#define OBJ_DASHBOARD_OB         DRAW_PREFIX "DASH_OB"
-#define OBJ_DASHBOARD_ENTRY      DRAW_PREFIX "DASH_ENTRY"
-#define OBJ_DASHBOARD_STATUS     DRAW_PREFIX "DASH_STATUS"
-
 //+------------------------------------------------------------------+
-//| Delete Object                                                    |
+//| DELETE OBJECT                                                    |
 //+------------------------------------------------------------------+
 
 void DeleteDrawingObject(string name)
 {
-   if(ObjectFind(0,name) >= 0)
-      ObjectDelete(0,name);
+   if(ObjectFind(0, name) >= 0)
+      ObjectDelete(0, name);
 }
 
 //+------------------------------------------------------------------+
-//| Delete All EA Drawing Objects                                    |
+//| DELETE ALL DRAWING OBJECTS                                       |
 //+------------------------------------------------------------------+
 
 void DeleteAllDrawingObjects()
 {
-   int total = ObjectsTotal(0,-1,-1);
+   int total =
+      ObjectsTotal(
+         0,
+         -1,
+         -1
+      );
 
-   for(int i=total-1; i>=0; i--)
+   for(int i = total - 1; i >= 0; i--)
    {
-      string name = ObjectName(0,i,-1,-1);
+      string name =
+         ObjectName(
+            0,
+            i,
+            -1,
+            -1
+         );
 
-      if(StringFind(name,DRAW_PREFIX) == 0)
-         ObjectDelete(0,name);
+      if(StringFind(
+            name,
+            DRAW_PREFIX
+         ) == 0)
+      {
+         ObjectDelete(
+            0,
+            name
+         );
+      }
    }
 }
 
 //+------------------------------------------------------------------+
-//| Create Horizontal Line                                          |
+//| HORIZONTAL LINE                                                  |
 //+------------------------------------------------------------------+
 
 bool DrawHorizontalLine(
    string name,
    double price,
    color lineColor,
-   ENUM_LINE_STYLE style=STYLE_SOLID,
-   int width=1
+   ENUM_LINE_STYLE style = STYLE_SOLID,
+   int width = 1
 )
 {
    if(price <= 0.0)
       return false;
 
-   if(ObjectFind(0,name) < 0)
+   if(ObjectFind(0, name) < 0)
    {
       if(!ObjectCreate(
             0,
@@ -166,11 +177,25 @@ bool DrawHorizontalLine(
       false
    );
 
+   ObjectSetInteger(
+      0,
+      name,
+      OBJPROP_SELECTED,
+      false
+   );
+
+   ObjectSetInteger(
+      0,
+      name,
+      OBJPROP_HIDDEN,
+      true
+   );
+
    return true;
 }
 
 //+------------------------------------------------------------------+
-//| Create Text Label                                                 |
+//| TEXT LABEL                                                       |
 //+------------------------------------------------------------------+
 
 bool DrawTextLabel(
@@ -179,13 +204,18 @@ bool DrawTextLabel(
    double price,
    string text,
    color textColor,
-   int fontSize=9
+   int fontSize = 9
 )
 {
-   if(price <= 0.0)
+   if(
+      price <= 0.0 ||
+      time <= 0
+   )
+   {
       return false;
+   }
 
-   if(ObjectFind(0,name) < 0)
+   if(ObjectFind(0, name) < 0)
    {
       if(!ObjectCreate(
             0,
@@ -199,20 +229,16 @@ bool DrawTextLabel(
          return false;
       }
    }
-
-   ObjectSetInteger(
-      0,
-      name,
-      OBJPROP_TIME,
-      time
-   );
-
-   ObjectSetDouble(
-      0,
-      name,
-      OBJPROP_PRICE,
-      price
-   );
+   else
+   {
+      ObjectMove(
+         0,
+         name,
+         0,
+         time,
+         price
+      );
+   }
 
    ObjectSetString(
       0,
@@ -259,6 +285,20 @@ bool DrawTextLabel(
    ObjectSetInteger(
       0,
       name,
+      OBJPROP_SELECTED,
+      false
+   );
+
+   ObjectSetInteger(
+      0,
+      name,
+      OBJPROP_HIDDEN,
+      true
+   );
+
+   ObjectSetInteger(
+      0,
+      name,
       OBJPROP_BACK,
       false
    );
@@ -267,7 +307,7 @@ bool DrawTextLabel(
 }
 
 //+------------------------------------------------------------------+
-//| Create Rectangle                                                 |
+//| RECTANGLE                                                        |
 //+------------------------------------------------------------------+
 
 bool DrawRectangle(
@@ -279,15 +319,17 @@ bool DrawRectangle(
    color rectangleColor
 )
 {
-   if(price1 <= 0.0 ||
+   if(
+      price1 <= 0.0 ||
       price2 <= 0.0 ||
       time1 <= 0 ||
-      time2 <= 0)
+      time2 <= 0
+   )
    {
       return false;
    }
 
-   if(ObjectFind(0,name) < 0)
+   if(ObjectFind(0, name) < 0)
    {
       if(!ObjectCreate(
             0,
@@ -364,222 +406,25 @@ bool DrawRectangle(
       false
    );
 
+   ObjectSetInteger(
+      0,
+      name,
+      OBJPROP_SELECTED,
+      false
+   );
+
+   ObjectSetInteger(
+      0,
+      name,
+      OBJPROP_HIDDEN,
+      true
+   );
+
    return true;
 }
 
 //+------------------------------------------------------------------+
-//| Draw Liquidity Sweep                                             |
-//+------------------------------------------------------------------+
-
-void DrawLiquiditySweep()
-{
-   if(!InpDrawLiquidity)
-      return;
-
-   if(!g_Liquidity.valid)
-   {
-      DeleteDrawingObject(OBJ_LIQUIDITY_LINE);
-      DeleteDrawingObject(OBJ_LIQUIDITY_LABEL);
-      DeleteDrawingObject(OBJ_SWEEP_ARROW);
-
-      return;
-   }
-
-   double price =
-      g_Liquidity.liquidityPrice;
-
-   if(price <= 0.0)
-      return;
-
-   color lineColor;
-
-   if(g_Liquidity.direction == BIAS_BULLISH)
-      lineColor = clrLimeGreen;
-   else
-      lineColor = clrTomato;
-
-   DrawHorizontalLine(
-      OBJ_LIQUIDITY_LINE,
-      price,
-      lineColor,
-      STYLE_DASH,
-      InpDrawingLineWidth
-   );
-
-   if(InpDrawPriceLabels)
-   {
-      string text;
-
-      if(g_Liquidity.direction == BIAS_BULLISH)
-         text = "BULLISH LIQUIDITY SWEEP";
-      else
-         text = "BEARISH LIQUIDITY SWEEP";
-
-      DrawTextLabel(
-         OBJ_LIQUIDITY_LABEL,
-         g_Liquidity.sweepTime,
-         price,
-         text,
-         lineColor,
-         9
-      );
-   }
-
-   //===============================================================
-   // Sweep marker
-   //===============================================================
-
-   if(g_Liquidity.sweepTime > 0)
-   {
-      datetime markerTime =
-         g_Liquidity.sweepTime;
-
-      double markerPrice;
-
-      if(g_Liquidity.direction == BIAS_BULLISH)
-         markerPrice = g_Liquidity.sweepLow;
-      else
-         markerPrice = g_Liquidity.sweepHigh;
-
-      if(markerPrice > 0.0)
-      {
-         if(ObjectFind(0,OBJ_SWEEP_ARROW) < 0)
-         {
-            ObjectCreate(
-               0,
-               OBJ_SWEEP_ARROW,
-               OBJ_ARROW,
-               0,
-               markerTime,
-               markerPrice
-            );
-         }
-
-         ObjectMove(
-            0,
-            OBJ_SWEEP_ARROW,
-            0,
-            markerTime,
-            markerPrice
-         );
-
-         if(g_Liquidity.direction == BIAS_BULLISH)
-         {
-            ObjectSetInteger(
-               0,
-               OBJ_SWEEP_ARROW,
-               OBJPROP_ARROWCODE,
-               233
-            );
-
-            ObjectSetInteger(
-               0,
-               OBJ_SWEEP_ARROW,
-               OBJPROP_COLOR,
-               clrLimeGreen
-            );
-         }
-         else
-         {
-            ObjectSetInteger(
-               0,
-               OBJ_SWEEP_ARROW,
-               OBJPROP_ARROWCODE,
-               234
-            );
-
-            ObjectSetInteger(
-               0,
-               OBJ_SWEEP_ARROW,
-               OBJPROP_COLOR,
-               clrTomato
-            );
-         }
-
-         ObjectSetInteger(
-            0,
-            OBJ_SWEEP_ARROW,
-            OBJPROP_WIDTH,
-            2
-         );
-
-         ObjectSetInteger(
-            0,
-            OBJ_SWEEP_ARROW,
-            OBJPROP_SELECTABLE,
-            false
-         );
-      }
-   }
-}
-
-//+------------------------------------------------------------------+
-//| Draw M5 Structure                                                |
-//+------------------------------------------------------------------+
-
-void DrawM5Structure()
-{
-   if(!InpDrawStructure)
-      return;
-
-   if(!g_Structure.valid)
-   {
-      DeleteDrawingObject(OBJ_STRUCTURE_LINE);
-      DeleteDrawingObject(OBJ_STRUCTURE_LABEL);
-
-      return;
-   }
-
-   if(g_Structure.brokenSwing <= 0.0)
-      return;
-
-   color structureColor;
-
-   if(g_Structure.direction == BIAS_BULLISH)
-      structureColor = clrDeepSkyBlue;
-   else
-      structureColor = clrOrangeRed;
-
-   DrawHorizontalLine(
-      OBJ_STRUCTURE_LINE,
-      g_Structure.brokenSwing,
-      structureColor,
-      STYLE_DOT,
-      2
-   );
-
-   if(InpDrawPriceLabels)
-   {
-      string text;
-
-      if(g_Structure.direction == BIAS_BULLISH)
-      {
-         if(g_Structure.mss)
-            text = "M5 BULLISH MSS / BOS";
-         else
-            text = "M5 BULLISH BOS";
-      }
-      else
-      {
-         if(g_Structure.mss)
-            text = "M5 BEARISH MSS / BOS";
-         else
-            text = "M5 BEARISH BOS";
-      }
-
-      DrawTextLabel(
-         OBJ_STRUCTURE_LABEL,
-         g_Structure.confirmationTime,
-         g_Structure.brokenSwing,
-         text,
-         structureColor,
-         9
-      );
-   }
-}
-
-//+------------------------------------------------------------------+
-//| Get Future Drawing Time                                          |
+//| FUTURE DRAWING TIME                                              |
 //+------------------------------------------------------------------+
 
 datetime GetFutureDrawingTime(
@@ -603,60 +448,393 @@ datetime GetFutureDrawingTime(
    if(seconds <= 0)
       seconds = 60;
 
-   return currentTime +
-          seconds * barsForward;
+   return
+      currentTime +
+      seconds * barsForward;
 }
 
 //+------------------------------------------------------------------+
-//| Draw Order Block                                                 |
+//| LIQUIDITY SWEEP                                                  |
+//+------------------------------------------------------------------+
+
+void DrawLiquiditySweep()
+{
+   if(!InpDrawLiquidity)
+   {
+      DeleteDrawingObject(
+         OBJ_LIQUIDITY_LINE
+      );
+
+      DeleteDrawingObject(
+         OBJ_LIQUIDITY_LABEL
+      );
+
+      DeleteDrawingObject(
+         OBJ_SWEEP_ARROW
+      );
+
+      return;
+   }
+
+   if(!g_Liquidity.valid)
+   {
+      DeleteDrawingObject(
+         OBJ_LIQUIDITY_LINE
+      );
+
+      DeleteDrawingObject(
+         OBJ_LIQUIDITY_LABEL
+      );
+
+      DeleteDrawingObject(
+         OBJ_SWEEP_ARROW
+      );
+
+      return;
+   }
+
+   double price =
+      g_Liquidity.liquidityPrice;
+
+   if(price <= 0.0)
+      return;
+
+   color lineColor =
+      clrSilver;
+
+   if(g_Liquidity.direction == BIAS_BULLISH)
+      lineColor = clrLimeGreen;
+   else
+   if(g_Liquidity.direction == BIAS_BEARISH)
+      lineColor = clrTomato;
+
+   DrawHorizontalLine(
+      OBJ_LIQUIDITY_LINE,
+      price,
+      lineColor,
+      STYLE_DASH,
+      InpDrawingLineWidth
+   );
+
+   //===============================================================
+   // LABEL
+   //===============================================================
+
+   if(InpDrawPriceLabels)
+   {
+      string text =
+         "LIQUIDITY SWEEP";
+
+      if(g_Liquidity.direction == BIAS_BULLISH)
+         text = "BULLISH LIQUIDITY SWEEP";
+      else
+      if(g_Liquidity.direction == BIAS_BEARISH)
+         text = "BEARISH LIQUIDITY SWEEP";
+
+      DrawTextLabel(
+         OBJ_LIQUIDITY_LABEL,
+         g_Liquidity.sweepTime,
+         price,
+         text,
+         lineColor,
+         9
+      );
+   }
+   else
+   {
+      DeleteDrawingObject(
+         OBJ_LIQUIDITY_LABEL
+      );
+   }
+
+   //===============================================================
+   // SWEEP ARROW
+   //===============================================================
+
+   if(g_Liquidity.sweepTime <= 0)
+   {
+      DeleteDrawingObject(
+         OBJ_SWEEP_ARROW
+      );
+
+      return;
+   }
+
+   double markerPrice = 0.0;
+
+   if(g_Liquidity.direction == BIAS_BULLISH)
+      markerPrice = g_Liquidity.sweepLow;
+   else
+   if(g_Liquidity.direction == BIAS_BEARISH)
+      markerPrice = g_Liquidity.sweepHigh;
+
+   if(markerPrice <= 0.0)
+   {
+      DeleteDrawingObject(
+         OBJ_SWEEP_ARROW
+      );
+
+      return;
+   }
+
+   if(ObjectFind(
+         0,
+         OBJ_SWEEP_ARROW
+      ) < 0)
+   {
+      ObjectCreate(
+         0,
+         OBJ_SWEEP_ARROW,
+         OBJ_ARROW,
+         0,
+         g_Liquidity.sweepTime,
+         markerPrice
+      );
+   }
+   else
+   {
+      ObjectMove(
+         0,
+         OBJ_SWEEP_ARROW,
+         0,
+         g_Liquidity.sweepTime,
+         markerPrice
+      );
+   }
+
+   if(g_Liquidity.direction == BIAS_BULLISH)
+   {
+      ObjectSetInteger(
+         0,
+         OBJ_SWEEP_ARROW,
+         OBJPROP_ARROWCODE,
+         233
+      );
+
+      ObjectSetInteger(
+         0,
+         OBJ_SWEEP_ARROW,
+         OBJPROP_COLOR,
+         clrLimeGreen
+      );
+   }
+   else
+   {
+      ObjectSetInteger(
+         0,
+         OBJ_SWEEP_ARROW,
+         OBJPROP_ARROWCODE,
+         234
+      );
+
+      ObjectSetInteger(
+         0,
+         OBJ_SWEEP_ARROW,
+         OBJPROP_COLOR,
+         clrTomato
+      );
+   }
+
+   ObjectSetInteger(
+      0,
+      OBJ_SWEEP_ARROW,
+      OBJPROP_WIDTH,
+      2
+   );
+
+   ObjectSetInteger(
+      0,
+      OBJ_SWEEP_ARROW,
+      OBJPROP_SELECTABLE,
+      false
+   );
+
+   ObjectSetInteger(
+      0,
+      OBJ_SWEEP_ARROW,
+      OBJPROP_SELECTED,
+      false
+   );
+
+   ObjectSetInteger(
+      0,
+      OBJ_SWEEP_ARROW,
+      OBJPROP_HIDDEN,
+      true
+   );
+}
+
+//+------------------------------------------------------------------+
+//| M5 STRUCTURE                                                     |
+//+------------------------------------------------------------------+
+
+void DrawM5Structure()
+{
+   if(!InpDrawStructure)
+   {
+      DeleteDrawingObject(
+         OBJ_STRUCTURE_LINE
+      );
+
+      DeleteDrawingObject(
+         OBJ_STRUCTURE_LABEL
+      );
+
+      return;
+   }
+
+   if(!g_Structure.valid)
+   {
+      DeleteDrawingObject(
+         OBJ_STRUCTURE_LINE
+      );
+
+      DeleteDrawingObject(
+         OBJ_STRUCTURE_LABEL
+      );
+
+      return;
+   }
+
+   if(g_Structure.brokenSwing <= 0.0)
+      return;
+
+   color structureColor =
+      clrSilver;
+
+   if(g_Structure.direction == BIAS_BULLISH)
+      structureColor = clrDeepSkyBlue;
+   else
+   if(g_Structure.direction == BIAS_BEARISH)
+      structureColor = clrOrangeRed;
+
+   DrawHorizontalLine(
+      OBJ_STRUCTURE_LINE,
+      g_Structure.brokenSwing,
+      structureColor,
+      STYLE_DOT,
+      2
+   );
+
+   if(!InpDrawPriceLabels)
+   {
+      DeleteDrawingObject(
+         OBJ_STRUCTURE_LABEL
+      );
+
+      return;
+   }
+
+   string text = "";
+
+   if(g_Structure.direction == BIAS_BULLISH)
+   {
+      if(g_Structure.mss)
+         text = "M5 BULLISH MSS / BOS";
+      else
+      if(g_Structure.bos)
+         text = "M5 BULLISH BOS";
+      else
+         text = "M5 BULLISH STRUCTURE";
+   }
+   else
+   if(g_Structure.direction == BIAS_BEARISH)
+   {
+      if(g_Structure.mss)
+         text = "M5 BEARISH MSS / BOS";
+      else
+      if(g_Structure.bos)
+         text = "M5 BEARISH BOS";
+      else
+         text = "M5 BEARISH STRUCTURE";
+   }
+   else
+   {
+      text = "M5 STRUCTURE";
+   }
+
+   DrawTextLabel(
+      OBJ_STRUCTURE_LABEL,
+      g_Structure.confirmationTime,
+      g_Structure.brokenSwing,
+      text,
+      structureColor,
+      9
+   );
+}
+
+//+------------------------------------------------------------------+
+//| ORDER BLOCK                                                      |
 //+------------------------------------------------------------------+
 
 void DrawOrderBlock()
 {
    if(!InpDrawOrderBlock)
+   {
+      DeleteDrawingObject(
+         OBJ_OB_RECTANGLE
+      );
+
+      DeleteDrawingObject(
+         OBJ_OB_LABEL
+      );
+
       return;
+   }
 
    if(!g_OrderBlock.valid)
    {
-      DeleteDrawingObject(OBJ_OB_RECTANGLE);
-      DeleteDrawingObject(OBJ_OB_LABEL);
+      DeleteDrawingObject(
+         OBJ_OB_RECTANGLE
+      );
+
+      DeleteDrawingObject(
+         OBJ_OB_LABEL
+      );
 
       return;
    }
 
-   if(g_OrderBlock.high <= 0.0 ||
-      g_OrderBlock.low <= 0.0)
+   if(
+      g_OrderBlock.high <= 0.0 ||
+      g_OrderBlock.low <= 0.0
+   )
    {
+      DeleteDrawingObject(
+         OBJ_OB_RECTANGLE
+      );
+
+      DeleteDrawingObject(
+         OBJ_OB_LABEL
+      );
+
       return;
    }
-
-   ENUM_TIMEFRAMES timeframe =
-      PERIOD_M5;
-
-   // M1 OB is identified by its shift/time,
-   // but the state does not explicitly store TF.
-   // Therefore use M5 for visual extension.
 
    datetime startTime =
       g_OrderBlock.createdTime;
 
    datetime endTime =
       GetFutureDrawingTime(
-         timeframe,
+         PERIOD_M5,
          InpOBRectangleBars
       );
 
-   if(startTime <= 0 ||
-      endTime <= 0)
+   if(
+      startTime <= 0 ||
+      endTime <= 0
+   )
    {
       return;
    }
 
-   color obColor;
+   color obColor =
+      clrSilver;
 
    if(g_OrderBlock.direction == BIAS_BULLISH)
       obColor = clrDarkSeaGreen;
    else
+   if(g_OrderBlock.direction == BIAS_BEARISH)
       obColor = clrIndianRed;
 
    DrawRectangle(
@@ -668,50 +846,85 @@ void DrawOrderBlock()
       obColor
    );
 
-   if(InpDrawPriceLabels)
+   if(!InpDrawPriceLabels)
    {
-      string text;
-
-      if(g_OrderBlock.direction == BIAS_BULLISH)
-         text = "BULLISH OB";
-      else
-         text = "BEARISH OB";
-
-      if(g_OrderBlock.hasFVG)
-         text += " + FVG";
-
-      DrawTextLabel(
-         OBJ_OB_LABEL,
-         startTime,
-         g_OrderBlock.high,
-         text,
-         obColor,
-         9
+      DeleteDrawingObject(
+         OBJ_OB_LABEL
       );
+
+      return;
    }
+
+   string text =
+      "ORDER BLOCK";
+
+   if(g_OrderBlock.direction == BIAS_BULLISH)
+      text = "BULLISH OB";
+   else
+   if(g_OrderBlock.direction == BIAS_BEARISH)
+      text = "BEARISH OB";
+
+   if(g_OrderBlock.hasFVG)
+      text += " + FVG";
+
+   DrawTextLabel(
+      OBJ_OB_LABEL,
+      startTime,
+      g_OrderBlock.high,
+      text,
+      obColor,
+      9
+   );
 }
 
 //+------------------------------------------------------------------+
-//| Draw FVG                                                         |
+//| ORDER BLOCK FVG                                                  |
 //+------------------------------------------------------------------+
 
 void DrawOrderBlockFVG()
 {
    if(!InpDrawFVG)
-      return;
-
-   if(!g_OrderBlock.valid ||
-      !g_OrderBlock.hasFVG)
    {
-      DeleteDrawingObject(OBJ_FVG_RECTANGLE);
-      DeleteDrawingObject(OBJ_FVG_LABEL);
+      DeleteDrawingObject(
+         OBJ_FVG_RECTANGLE
+      );
+
+      DeleteDrawingObject(
+         OBJ_FVG_LABEL
+      );
 
       return;
    }
 
-   if(g_OrderBlock.fvgHigh <= 0.0 ||
-      g_OrderBlock.fvgLow <= 0.0)
+   if(
+      !g_OrderBlock.valid ||
+      !g_OrderBlock.hasFVG
+   )
    {
+      DeleteDrawingObject(
+         OBJ_FVG_RECTANGLE
+      );
+
+      DeleteDrawingObject(
+         OBJ_FVG_LABEL
+      );
+
+      return;
+   }
+
+   if(
+      g_OrderBlock.fvgHigh <= 0.0 ||
+      g_OrderBlock.fvgLow <= 0.0
+   )
+   {
+      DeleteDrawingObject(
+         OBJ_FVG_RECTANGLE
+      );
+
+      DeleteDrawingObject(
+         OBJ_FVG_LABEL
+      );
+
       return;
    }
 
@@ -724,17 +937,18 @@ void DrawOrderBlockFVG()
          InpFVGRectangleBars
       );
 
-   if(startTime <= 0 ||
-      endTime <= 0)
+   if(
+      startTime <= 0 ||
+      endTime <= 0
+   )
    {
       return;
    }
 
-   color fvgColor;
+   color fvgColor =
+      clrDodgerBlue;
 
-   if(g_OrderBlock.direction == BIAS_BULLISH)
-      fvgColor = clrDodgerBlue;
-   else
+   if(g_OrderBlock.direction == BIAS_BEARISH)
       fvgColor = clrViolet;
 
    DrawRectangle(
@@ -746,58 +960,127 @@ void DrawOrderBlockFVG()
       fvgColor
    );
 
-   if(InpDrawPriceLabels)
+   if(!InpDrawPriceLabels)
    {
-      string text = "FVG";
-
-      if(g_OrderBlock.fvgInsideOB)
-         text = "FVG INSIDE OB";
-
-      DrawTextLabel(
-         OBJ_FVG_LABEL,
-         startTime,
-         g_OrderBlock.fvgHigh,
-         text,
-         fvgColor,
-         8
+      DeleteDrawingObject(
+         OBJ_FVG_LABEL
       );
+
+      return;
    }
+
+   string text =
+      "FVG";
+
+   if(g_OrderBlock.fvgInsideOB)
+      text = "FVG INSIDE OB";
+   else
+   if(g_OrderBlock.fvgBesideOB)
+      text = "FVG BESIDE OB";
+   else
+   if(g_OrderBlock.fvgNearOB)
+      text = "FVG NEAR OB";
+
+   DrawTextLabel(
+      OBJ_FVG_LABEL,
+      startTime,
+      g_OrderBlock.fvgHigh,
+      text,
+      fvgColor,
+      8
+   );
 }
 
 //+------------------------------------------------------------------+
-//| Draw Entry Levels                                                |
+//| ENTRY CONFIRMATION                                               |
 //+------------------------------------------------------------------+
 
 void DrawEntryConfirmation(
-EntryConfirmationState &entry
+   EntryConfirmationState &entry
 )
 {
    if(!InpDrawEntry)
-      return;
-
-   if(!entry.valid)
    {
-      DeleteDrawingObject(OBJ_ENTRY_LINE);
-      DeleteDrawingObject(OBJ_SL_LINE);
-      DeleteDrawingObject(OBJ_TP_LINE);
+      DeleteDrawingObject(
+         OBJ_ENTRY_LINE
+      );
 
-      DeleteDrawingObject(OBJ_ENTRY_LABEL);
-      DeleteDrawingObject(OBJ_SL_LABEL);
-      DeleteDrawingObject(OBJ_TP_LABEL);
+      DeleteDrawingObject(
+         OBJ_SL_LINE
+      );
+
+      DeleteDrawingObject(
+         OBJ_TP_LINE
+      );
+
+      DeleteDrawingObject(
+         OBJ_ENTRY_LABEL
+      );
+
+      DeleteDrawingObject(
+         OBJ_SL_LABEL
+      );
+
+      DeleteDrawingObject(
+         OBJ_TP_LABEL
+      );
 
       return;
    }
 
-   if(entry.entryPrice <= 0.0)
-      return;
+   if(!entry.valid)
+   {
+      DeleteDrawingObject(
+         OBJ_ENTRY_LINE
+      );
 
-   DrawHorizontalLine(
-      OBJ_ENTRY_LINE,
-      entry.entryPrice,
-      clrWhite,
-      STYLE_SOLID,
-      2
-   );
+      DeleteDrawingObject(
+         OBJ_SL_LINE
+      );
+
+      DeleteDrawingObject(
+         OBJ_TP_LINE
+      );
+
+      DeleteDrawingObject(
+         OBJ_ENTRY_LABEL
+      );
+
+      DeleteDrawingObject(
+         OBJ_SL_LABEL
+      );
+
+      DeleteDrawingObject(
+         OBJ_TP_LABEL
+      );
+
+      return;
+   }
+
+   //===============================================================
+   // ENTRY
+   //===============================================================
+
+   if(entry.entryPrice > 0.0)
+   {
+      DrawHorizontalLine(
+         OBJ_ENTRY_LINE,
+         entry.entryPrice,
+         clrWhite,
+         STYLE_SOLID,
+         2
+      );
+   }
+   else
+   {
+      DeleteDrawingObject(
+         OBJ_ENTRY_LINE
+      );
+   }
+
+   //===============================================================
+   // SL
+   //===============================================================
 
    if(entry.stopLoss > 0.0)
    {
@@ -809,6 +1092,16 @@ EntryConfirmationState &entry
          1
       );
    }
+   else
+   {
+      DeleteDrawingObject(
+         OBJ_SL_LINE
+      );
+   }
+
+   //===============================================================
+   // TP
+   //===============================================================
 
    if(entry.takeProfit > 0.0)
    {
@@ -820,19 +1113,53 @@ EntryConfirmationState &entry
          1
       );
    }
-
-   if(InpDrawPriceLabels)
+   else
    {
-      datetime labelTime =
-         entry.confirmationTime;
+      DeleteDrawingObject(
+         OBJ_TP_LINE
+      );
+   }
 
-      if(labelTime <= 0)
-         labelTime = iTime(
+   //===============================================================
+   // LABEL TIME
+   //===============================================================
+
+   datetime labelTime =
+      entry.confirmationTime;
+
+   if(labelTime <= 0)
+   {
+      labelTime =
+         iTime(
             _Symbol,
             PERIOD_M5,
             0
          );
+   }
 
+   if(!InpDrawPriceLabels)
+   {
+      DeleteDrawingObject(
+         OBJ_ENTRY_LABEL
+      );
+
+      DeleteDrawingObject(
+         OBJ_SL_LABEL
+      );
+
+      DeleteDrawingObject(
+         OBJ_TP_LABEL
+      );
+
+      return;
+   }
+
+   //===============================================================
+   // ENTRY LABEL
+   //===============================================================
+
+   if(entry.entryPrice > 0.0)
+   {
       DrawTextLabel(
          OBJ_ENTRY_LABEL,
          labelTime,
@@ -841,337 +1168,43 @@ EntryConfirmationState &entry
          clrWhite,
          9
       );
-
-      if(entry.stopLoss > 0.0)
-      {
-         DrawTextLabel(
-            OBJ_SL_LABEL,
-            labelTime,
-            entry.stopLoss,
-            "SL",
-            clrRed,
-            9
-         );
-      }
-
-      if(entry.takeProfit > 0.0)
-      {
-         DrawTextLabel(
-            OBJ_TP_LABEL,
-            labelTime,
-            entry.takeProfit,
-            "TP",
-            clrLime,
-            9
-         );
-      }
    }
-}
 
-//+------------------------------------------------------------------+
-//| Dashboard Object                                                 |
-//+------------------------------------------------------------------+
+   //===============================================================
+   // SL LABEL
+   //===============================================================
 
-void CreateDashboardLabel(
-   string name,
-   int x,
-   int y,
-   string text,
-   color textColor,
-   int fontSize=9
-)
-{
-   if(ObjectFind(0,name) < 0)
+   if(entry.stopLoss > 0.0)
    {
-      ObjectCreate(
-         0,
-         name,
-         OBJ_LABEL,
-         0,
-         0,
-         0
+      DrawTextLabel(
+         OBJ_SL_LABEL,
+         labelTime,
+         entry.stopLoss,
+         "SL",
+         clrRed,
+         9
       );
    }
 
-   ObjectSetInteger(
-      0,
-      name,
-      OBJPROP_CORNER,
-      CORNER_LEFT_UPPER
-   );
+   //===============================================================
+   // TP LABEL
+   //===============================================================
 
-   ObjectSetInteger(
-      0,
-      name,
-      OBJPROP_XDISTANCE,
-      x
-   );
-
-   ObjectSetInteger(
-      0,
-      name,
-      OBJPROP_YDISTANCE,
-      y
-   );
-
-   ObjectSetString(
-      0,
-      name,
-      OBJPROP_TEXT,
-      text
-   );
-
-   ObjectSetString(
-      0,
-      name,
-      OBJPROP_FONT,
-      "Arial"
-   );
-
-   ObjectSetInteger(
-      0,
-      name,
-      OBJPROP_FONTSIZE,
-      fontSize
-   );
-
-   ObjectSetInteger(
-      0,
-      name,
-      OBJPROP_COLOR,
-      textColor
-   );
-
-   ObjectSetInteger(
-      0,
-      name,
-      OBJPROP_SELECTABLE,
-      false
-   );
+   if(entry.takeProfit > 0.0)
+   {
+      DrawTextLabel(
+         OBJ_TP_LABEL,
+         labelTime,
+         entry.takeProfit,
+         "TP",
+         clrLime,
+         9
+      );
+   }
 }
 
 //+------------------------------------------------------------------+
-//| Draw Dashboard                                                   |
-//+------------------------------------------------------------------+
-
-void DrawChartDashboard()
-{
-   if(!InpDrawDashboard)
-      return;
-
-   //===============================================================
-   // TITLE
-   //===============================================================
-
-   CreateDashboardLabel(
-      OBJ_DASHBOARD_TITLE,
-      15,
-      20,
-      "SCALPING EA",
-      clrWhite,
-      11
-   );
-
-   //===============================================================
-   // LIQUIDITY
-   //===============================================================
-
-   string liquidityText;
-
-   color liquidityColor;
-
-   if(g_Liquidity.valid)
-   {
-      if(g_Liquidity.direction == BIAS_BULLISH)
-      {
-         liquidityText =
-            "Liquidity : BULLISH SWEEP";
-
-         liquidityColor =
-            clrLimeGreen;
-      }
-      else
-      {
-         liquidityText =
-            "Liquidity : BEARISH SWEEP";
-
-         liquidityColor =
-            clrTomato;
-      }
-   }
-   else
-   {
-      liquidityText =
-         "Liquidity : WAITING";
-
-      liquidityColor =
-         clrSilver;
-   }
-
-   CreateDashboardLabel(
-      OBJ_DASHBOARD_LIQ,
-      15,
-      42,
-      liquidityText,
-      liquidityColor,
-      9
-   );
-
-   //===============================================================
-   // STRUCTURE
-   //===============================================================
-
-   string structureText;
-
-   color structureColor;
-
-   if(g_Structure.valid)
-   {
-      if(g_Structure.direction == BIAS_BULLISH)
-      {
-         structureText =
-            "Structure : BULLISH MSS/BOS";
-
-         structureColor =
-            clrDeepSkyBlue;
-      }
-      else
-      {
-         structureText =
-            "Structure : BEARISH MSS/BOS";
-
-         structureColor =
-            clrOrange;
-      }
-   }
-   else
-   {
-      structureText =
-         "Structure : WAITING";
-
-      structureColor =
-         clrSilver;
-   }
-
-   CreateDashboardLabel(
-      OBJ_DASHBOARD_STRUCTURE,
-      15,
-      62,
-      structureText,
-      structureColor,
-      9
-   );
-
-   //===============================================================
-   // ORDER BLOCK
-   //===============================================================
-
-   string obText;
-
-   color obColor;
-
-   if(g_OrderBlock.valid)
-   {
-      if(g_OrderBlock.direction == BIAS_BULLISH)
-      {
-         obText =
-            "Order Block : BULLISH";
-
-         obColor =
-            clrDarkSeaGreen;
-      }
-      else
-      {
-         obText =
-            "Order Block : BEARISH";
-
-         obColor =
-            clrIndianRed;
-      }
-
-      if(g_OrderBlock.hasFVG)
-         obText += " + FVG";
-   }
-   else
-   {
-      obText =
-         "Order Block : WAITING";
-
-      obColor =
-         clrSilver;
-   }
-
-   CreateDashboardLabel(
-      OBJ_DASHBOARD_OB,
-      15,
-      82,
-      obText,
-      obColor,
-      9
-   );
-
-   //===============================================================
-   // ENTRY
-   //===============================================================
-
-   string entryText;
-
-   color entryColor;
-
-   entryText =
-      "Entry : WAITING";
-
-   entryColor =
-      clrSilver;
-
-   CreateDashboardLabel(
-      OBJ_DASHBOARD_ENTRY,
-      15,
-      102,
-      entryText,
-      entryColor,
-      9
-   );
-
-   //===============================================================
-   // OVERALL STATUS
-   //===============================================================
-
-   string statusText;
-
-   color statusColor;
-
-   if(g_Liquidity.valid &&
-      g_Structure.valid &&
-      g_OrderBlock.valid)
-   {
-      statusText =
-         "STATUS : SETUP READY";
-
-      statusColor =
-         clrLimeGreen;
-   }
-   else
-   {
-      statusText =
-         "STATUS : ANALYZING";
-
-      statusColor =
-         clrSilver;
-   }
-
-   CreateDashboardLabel(
-      OBJ_DASHBOARD_STATUS,
-      15,
-      124,
-      statusText,
-      statusColor,
-      10
-   );
-}
-
-//+------------------------------------------------------------------+
-//| Update All Chart Drawings                                        |
+//| UPDATE ALL CHART DRAWINGS                                       |
 //+------------------------------------------------------------------+
 
 void UpdateChartDrawings()
@@ -1184,13 +1217,15 @@ void UpdateChartDrawings()
 
    DrawOrderBlockFVG();
 
-   DrawChartDashboard();
+   DrawEntryConfirmation(
+      g_Entry
+   );
 
-   ChartRedraw();
+   ChartRedraw(0);
 }
 
 //+------------------------------------------------------------------+
-//| Initialization                                                   |
+//| INITIALIZE                                                       |
 //+------------------------------------------------------------------+
 
 void InitializeChartDrawing()
@@ -1201,14 +1236,14 @@ void InitializeChartDrawing()
 }
 
 //+------------------------------------------------------------------+
-//| Deinitialization                                                 |
+//| RELEASE                                                          |
 //+------------------------------------------------------------------+
 
 void ReleaseChartDrawing()
 {
    DeleteAllDrawingObjects();
 
-   ChartRedraw();
+   ChartRedraw(0);
 }
 
 //+------------------------------------------------------------------+
