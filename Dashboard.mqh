@@ -10,17 +10,16 @@
 
 //+------------------------------------------------------------------+
 //| SMC LOW-TF DASHBOARD                                             |
-//| LABEL ONLY - NO BACKGROUND RECTANGLE                             |
+//| LABEL ONLY - NO BACKGROUND                                       |
 //+------------------------------------------------------------------+
 
 input group "=== Dashboard ==="
 
 input bool InpShowDashboard       = true;
 input int  InpDashboardX          = 20;
-input int InpDashboardY          = 30;
-input int InpDashboardTextSize    = 9;
-input int InpDashboardLineHeight  = 17;
-
+input int  InpDashboardY          = 30;
+input int  InpDashboardTextSize   = 9;
+input int  InpDashboardLineHeight = 17;
 
 //+------------------------------------------------------------------+
 //| COLORS                                                           |
@@ -33,13 +32,11 @@ color DashSell    = clrRed;
 color DashNeutral = clrGray;
 color DashOrange  = clrOrange;
 
-
 //+------------------------------------------------------------------+
 //| PREFIX                                                           |
 //+------------------------------------------------------------------+
 
 string DASH_PREFIX = "SMC_LOWTF_MAIN_";
-
 
 //+------------------------------------------------------------------+
 //| OBJECT NAME                                                      |
@@ -49,7 +46,6 @@ string DashObjectName(string id)
 {
    return DASH_PREFIX + id;
 }
-
 
 //+------------------------------------------------------------------+
 //| DELETE OBJECTS BY PREFIX                                         |
@@ -68,36 +64,50 @@ void DeleteObjectsWithPrefix(string prefix)
    }
 }
 
-
 //+------------------------------------------------------------------+
-//| DELETE OLD DASHBOARD OBJECTS                                     |
+//| DELETE DASHBOARD                                                 |
 //+------------------------------------------------------------------+
 
 void DeleteDashboard()
 {
-   // Current dashboard
    DeleteObjectsWithPrefix(DASH_PREFIX);
 
-   // Previous versions
+   // Previous dashboard versions
    DeleteObjectsWithPrefix("SMC_LOWTF_DASH_");
    DeleteObjectsWithPrefix("ScalpingEA_Dash_");
    DeleteObjectsWithPrefix("SMC_Dash_");
 
-   // Known old background objects
-   ObjectDelete(0, "ScalpingEA_Dashboard_Background");
-   ObjectDelete(0, "SMC_LOWTF_Dashboard_Background");
+   // Known old backgrounds
+   ObjectDelete(
+      0,
+      "ScalpingEA_Dashboard_Background"
+   );
 
-   // Extra possible old background names
-   ObjectDelete(0, "SMC_LOWTF_MAIN_Background");
-   ObjectDelete(0, "SMC_LOWTF_DASH_Panel");
-   ObjectDelete(0, "SMC_LOWTF_DASH_Background");
+   ObjectDelete(
+      0,
+      "SMC_LOWTF_Dashboard_Background"
+   );
+
+   ObjectDelete(
+      0,
+      "SMC_LOWTF_MAIN_Background"
+   );
+
+   ObjectDelete(
+      0,
+      "SMC_LOWTF_DASH_Panel"
+   );
+
+   ObjectDelete(
+      0,
+      "SMC_LOWTF_DASH_Background"
+   );
 
    ChartRedraw(0);
 }
 
-
 //+------------------------------------------------------------------+
-//| DRAW LABEL                                                       |
+//| DRAW DASHBOARD LABEL                                             |
 //+------------------------------------------------------------------+
 
 void DrawDashboardLabel(
@@ -110,7 +120,8 @@ void DrawDashboardLabel(
    bool bold = false
 )
 {
-   string objectName = DashObjectName(name);
+   string objectName =
+      DashObjectName(name);
 
    if(ObjectFind(0, objectName) < 0)
    {
@@ -212,7 +223,6 @@ void DrawDashboardLabel(
    );
 }
 
-
 //+------------------------------------------------------------------+
 //| POSITION DIRECTION                                               |
 //+------------------------------------------------------------------+
@@ -235,7 +245,6 @@ string GetPositionDirection()
    return "NONE";
 }
 
-
 //+------------------------------------------------------------------+
 //| MANAGEMENT STATUS                                                |
 //+------------------------------------------------------------------+
@@ -246,10 +255,14 @@ string GetTradeManagementStage()
       return "WAITING";
 
    double entry =
-      PositionGetDouble(POSITION_PRICE_OPEN);
+      PositionGetDouble(
+         POSITION_PRICE_OPEN
+      );
 
    double sl =
-      PositionGetDouble(POSITION_SL);
+      PositionGetDouble(
+         POSITION_SL
+      );
 
    if(entry <= 0.0)
       return "ACTIVE";
@@ -279,7 +292,6 @@ string GetTradeManagementStage()
    return "ACTIVE";
 }
 
-
 //+------------------------------------------------------------------+
 //| LIQUIDITY STATUS                                                 |
 //+------------------------------------------------------------------+
@@ -295,9 +307,14 @@ string GetLiquidityStatus()
    if(g_Liquidity.type == LIQUIDITY_BUY_SIDE)
       return "BUY-SIDE SWEPT";
 
+   if(g_Liquidity.direction == BIAS_BULLISH)
+      return "BULLISH SWEEP";
+
+   if(g_Liquidity.direction == BIAS_BEARISH)
+      return "BEARISH SWEEP";
+
    return "CONFIRMED";
 }
-
 
 //+------------------------------------------------------------------+
 //| STRUCTURE STATUS                                                 |
@@ -328,7 +345,6 @@ string GetStructureStatus()
    return result;
 }
 
-
 //+------------------------------------------------------------------+
 //| ORDER BLOCK STATUS                                               |
 //+------------------------------------------------------------------+
@@ -348,7 +364,6 @@ string GetOBStatus()
 
    return "INVALID";
 }
-
 
 //+------------------------------------------------------------------+
 //| FVG STATUS                                                       |
@@ -374,7 +389,6 @@ string GetFVGStatus()
    return "CONFIRMED";
 }
 
-
 //+------------------------------------------------------------------+
 //| ENTRY STATUS                                                     |
 //+------------------------------------------------------------------+
@@ -396,7 +410,6 @@ string GetEntryStatus()
    return "ZONE ACTIVE";
 }
 
-
 //+------------------------------------------------------------------+
 //| CURRENT R                                                        |
 //+------------------------------------------------------------------+
@@ -407,21 +420,22 @@ double GetCurrentR()
       return 0.0;
 
    double entry =
-      PositionGetDouble(POSITION_PRICE_OPEN);
+      PositionGetDouble(
+         POSITION_PRICE_OPEN
+      );
 
    double sl =
-      PositionGetDouble(POSITION_SL);
+      PositionGetDouble(
+         POSITION_SL
+      );
 
    double current =
-      PositionGetDouble(POSITION_PRICE_CURRENT);
+      PositionGetDouble(
+         POSITION_PRICE_CURRENT
+      );
 
-   if(
-      entry <= 0.0 ||
-      sl <= 0.0
-   )
-   {
+   if(entry <= 0.0 || sl <= 0.0)
       return 0.0;
-   }
 
    double risk =
       MathAbs(entry - sl);
@@ -441,6 +455,59 @@ double GetCurrentR()
    return 0.0;
 }
 
+//+------------------------------------------------------------------+
+//| GET OVERALL STATUS                                               |
+//+------------------------------------------------------------------+
+
+string GetDashboardOverallStatus()
+{
+   bool hasPosition =
+      PositionSelect(_Symbol);
+
+   if(g_Execution.executed && hasPosition)
+      return "TRADE ACTIVE";
+
+   if(g_Entry.valid)
+      return "ENTRY CONFIRMED";
+
+   if(g_OrderBlock.valid)
+      return "OB CONFIRMED";
+
+   if(g_Structure.valid)
+      return "STRUCTURE CONFIRMED";
+
+   if(g_Liquidity.valid)
+      return "LIQUIDITY CONFIRMED";
+
+   return "WAITING";
+}
+
+//+------------------------------------------------------------------+
+//| GET STATUS COLOR                                                 |
+//+------------------------------------------------------------------+
+
+color GetDashboardStatusColor()
+{
+   bool hasPosition =
+      PositionSelect(_Symbol);
+
+   if(g_Execution.executed && hasPosition)
+      return DashBuy;
+
+   if(g_Entry.valid)
+      return DashBuy;
+
+   if(g_OrderBlock.valid)
+      return DashOrange;
+
+   if(g_Structure.valid)
+      return DashOrange;
+
+   if(g_Liquidity.valid)
+      return DashOrange;
+
+   return DashNeutral;
+}
 
 //+------------------------------------------------------------------+
 //| MAIN DASHBOARD                                                   |
@@ -449,17 +516,13 @@ double GetCurrentR()
 void UpdateDashboard()
 {
    if(!InpShowDashboard)
+   {
+      DeleteDashboard();
       return;
-
-   //===============================================================
-   // POSITION
-   //===============================================================
+   }
 
    bool hasPosition =
       PositionSelect(_Symbol);
-
-   string direction =
-      GetPositionDirection();
 
    //===============================================================
    // ACCOUNT
@@ -481,63 +544,11 @@ void UpdateDashboard()
       );
 
    //===============================================================
-   // STATUS
+   // POSITION
    //===============================================================
 
-   string status =
-      "WAITING";
-
-   color statusColor =
-      DashNeutral;
-
-   if(g_Execution.executed && hasPosition)
-   {
-      status =
-         "TRADE ACTIVE";
-
-      statusColor =
-         DashBuy;
-   }
-   else
-   if(g_Entry.valid)
-   {
-      status =
-         "ENTRY CONFIRMED";
-
-      statusColor =
-         DashBuy;
-   }
-   else
-   if(g_OrderBlock.valid)
-   {
-      status =
-         "OB CONFIRMED";
-
-      statusColor =
-         DashOrange;
-   }
-   else
-   if(g_Structure.valid)
-   {
-      status =
-         "STRUCTURE CONFIRMED";
-
-      statusColor =
-         DashOrange;
-   }
-   else
-   if(g_Liquidity.valid)
-   {
-      status =
-         "LIQUIDITY CONFIRMED";
-
-      statusColor =
-         DashOrange;
-   }
-
-   //===============================================================
-   // POSITION COLOR
-   //===============================================================
+   string direction =
+      GetPositionDirection();
 
    color directionColor =
       DashNeutral;
@@ -562,7 +573,17 @@ void UpdateDashboard()
       pnlColor = DashSell;
 
    //===============================================================
-   // START POSITION
+   // STATUS
+   //===============================================================
+
+   string status =
+      GetDashboardOverallStatus();
+
+   color statusColor =
+      GetDashboardStatusColor();
+
+   //===============================================================
+   // POSITION
    //===============================================================
 
    int startX =
@@ -571,10 +592,7 @@ void UpdateDashboard()
    int currentY =
       InpDashboardY;
 
-   int textsize =
-      InpDashboardTextSize;
-
-   int detailsSize =
+   int textSize =
       InpDashboardTextSize;
 
    int lineHeight =
@@ -606,7 +624,7 @@ void UpdateDashboard()
       "Status: " + status,
       startX,
       currentY,
-      textsize,
+      textSize,
       statusColor,
       true
    );
@@ -620,12 +638,12 @@ void UpdateDashboard()
    DrawDashboardLabel(
       "Balance",
       StringFormat(
-         "Balance: $%.2f",
+         "Balance: %.2f",
          balance
       ),
       startX,
       currentY,
-      textsize,
+      textSize,
       DashText
    );
 
@@ -638,12 +656,12 @@ void UpdateDashboard()
    DrawDashboardLabel(
       "Equity",
       StringFormat(
-         "Equity: $%.2f",
+         "Equity: %.2f",
          equity
       ),
       startX,
       currentY,
-      textsize,
+      textSize,
       DashText
    );
 
@@ -656,20 +674,35 @@ void UpdateDashboard()
    DrawDashboardLabel(
       "FloatingPL",
       StringFormat(
-         "Floating P/L: $%.2f",
+         "Floating P/L: %.2f",
          floatingPL
       ),
       startX,
       currentY,
-      textsize,
+      textSize,
       pnlColor
    );
 
-   currentY += lineHeight + 5;
+   currentY +=
+      lineHeight + 5;
 
    //===============================================================
    // LIQUIDITY
    //===============================================================
+
+   color liquidityColor =
+      DashNeutral;
+
+   if(g_Liquidity.valid)
+   {
+      if(g_Liquidity.direction == BIAS_BULLISH)
+         liquidityColor = DashBuy;
+      else
+      if(g_Liquidity.direction == BIAS_BEARISH)
+         liquidityColor = DashSell;
+      else
+         liquidityColor = DashOrange;
+   }
 
    DrawDashboardLabel(
       "Liquidity",
@@ -677,10 +710,8 @@ void UpdateDashboard()
       GetLiquidityStatus(),
       startX,
       currentY,
-      detailsSize,
-      g_Liquidity.valid
-         ? DashBuy
-         : DashNeutral
+      textSize,
+      liquidityColor
    );
 
    currentY += lineHeight;
@@ -689,16 +720,28 @@ void UpdateDashboard()
    // STRUCTURE
    //===============================================================
 
+   color structureColor =
+      DashNeutral;
+
+   if(g_Structure.valid)
+   {
+      if(g_Structure.direction == BIAS_BULLISH)
+         structureColor = DashBuy;
+      else
+      if(g_Structure.direction == BIAS_BEARISH)
+         structureColor = DashSell;
+      else
+         structureColor = DashOrange;
+   }
+
    DrawDashboardLabel(
       "Structure",
       "Structure: " +
       GetStructureStatus(),
       startX,
       currentY,
-      detailsSize,
-      g_Structure.valid
-         ? DashBuy
-         : DashNeutral
+      textSize,
+      structureColor
    );
 
    currentY += lineHeight;
@@ -707,16 +750,28 @@ void UpdateDashboard()
    // ORDER BLOCK
    //===============================================================
 
+   color obColor =
+      DashNeutral;
+
+   if(g_OrderBlock.valid)
+   {
+      if(g_OrderBlock.direction == BIAS_BULLISH)
+         obColor = DashBuy;
+      else
+      if(g_OrderBlock.direction == BIAS_BEARISH)
+         obColor = DashSell;
+      else
+         obColor = DashOrange;
+   }
+
    DrawDashboardLabel(
       "OrderBlock",
       "OrderBlock: " +
       GetOBStatus(),
       startX,
       currentY,
-      detailsSize,
-      g_OrderBlock.valid
-         ? DashBuy
-         : DashNeutral
+      textSize,
+      obColor
    );
 
    currentY += lineHeight;
@@ -725,16 +780,25 @@ void UpdateDashboard()
    // FVG
    //===============================================================
 
+   color fvgColor =
+      DashNeutral;
+
+   if(
+      g_OrderBlock.valid &&
+      g_OrderBlock.hasFVG
+   )
+   {
+      fvgColor = DashBuy;
+   }
+
    DrawDashboardLabel(
       "FVG",
       "FVG: " +
       GetFVGStatus(),
       startX,
       currentY,
-      detailsSize,
-      g_OrderBlock.hasFVG
-         ? DashBuy
-         : DashNeutral
+      textSize,
+      fvgColor
    );
 
    currentY += lineHeight;
@@ -743,19 +807,24 @@ void UpdateDashboard()
    // ENTRY
    //===============================================================
 
+   color entryColor =
+      DashNeutral;
+
+   if(g_Entry.valid)
+      entryColor = DashBuy;
+
    DrawDashboardLabel(
       "Entry",
       "Entry: " +
       GetEntryStatus(),
       startX,
       currentY,
-      detailsSize,
-      g_Entry.valid
-         ? DashBuy
-         : DashNeutral
+      textSize,
+      entryColor
    );
 
-   currentY += lineHeight + 5;
+   currentY +=
+      lineHeight + 5;
 
    //===============================================================
    // POSITION
@@ -766,7 +835,7 @@ void UpdateDashboard()
       "Position: " + direction,
       startX,
       currentY,
-      textsize,
+      textSize,
       directionColor,
       true
    );
@@ -799,8 +868,9 @@ void UpdateDashboard()
             POSITION_TP
          );
 
+      currentY += 5;
+
       // LOT
-   currentY += lineHeight+5;
 
       DrawDashboardLabel(
          "Lot",
@@ -810,13 +880,13 @@ void UpdateDashboard()
          ),
          startX,
          currentY,
-         detailsSize,
+         textSize,
          DashText
       );
 
       currentY += lineHeight;
 
-      // ENTRY PRICE
+      // ENTRY
 
       DrawDashboardLabel(
          "EntryPrice",
@@ -827,7 +897,7 @@ void UpdateDashboard()
          ),
          startX,
          currentY,
-         detailsSize,
+         textSize,
          DashText
       );
 
@@ -844,8 +914,10 @@ void UpdateDashboard()
          ),
          startX,
          currentY,
-         detailsSize,
-         DashText
+         textSize,
+         sl > 0.0
+            ? DashSell
+            : DashNeutral
       );
 
       currentY += lineHeight;
@@ -861,8 +933,10 @@ void UpdateDashboard()
          ),
          startX,
          currentY,
-         detailsSize,
-         DashText
+         textSize,
+         tp > 0.0
+            ? DashBuy
+            : DashNeutral
       );
 
       currentY += lineHeight;
@@ -873,7 +947,7 @@ void UpdateDashboard()
          GetCurrentR();
 
       color rColor =
-         DashText;
+         DashNeutral;
 
       if(currentR > 0.0)
          rColor = DashBuy;
@@ -889,13 +963,13 @@ void UpdateDashboard()
          ),
          startX,
          currentY,
-         detailsSize,
+         textSize,
          rColor
       );
 
       currentY += lineHeight;
 
-      // MANAGER
+      // MANAGEMENT
 
       DrawDashboardLabel(
          "Manager",
@@ -903,12 +977,10 @@ void UpdateDashboard()
          GetTradeManagementStage(),
          startX,
          currentY,
-         detailsSize,
+         textSize,
          DashOrange,
          true
       );
-
-      currentY += lineHeight;
    }
    else
    {
@@ -917,21 +989,13 @@ void UpdateDashboard()
          "Position: NONE",
          startX,
          currentY,
-         detailsSize,
+         textSize,
          DashNeutral
       );
-
-      currentY += lineHeight;
    }
-
-   //===============================================================
-   // IMPORTANT:
-   // NO BACKGROUND IS CREATED HERE.
-   //===============================================================
 
    ChartRedraw(0);
 }
-
 
 //+------------------------------------------------------------------+
 //| INITIALIZE                                                       |
@@ -939,7 +1003,6 @@ void UpdateDashboard()
 
 void InitializeDashboard()
 {
-   // Remove ALL old dashboard objects first.
    DeleteDashboard();
 
    if(!InpShowDashboard)
@@ -947,7 +1010,6 @@ void InitializeDashboard()
 
    UpdateDashboard();
 }
-
 
 //+------------------------------------------------------------------+
 //| SHUTDOWN                                                         |
@@ -959,7 +1021,6 @@ void ShutdownDashboard()
 
    ChartRedraw(0);
 }
-
 
 //+------------------------------------------------------------------+
 
