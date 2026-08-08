@@ -1,10 +1,10 @@
-
 #ifndef SCALPINGEA_EXECUTION_ENGINE_MQH
 #define SCALPINGEA_EXECUTION_ENGINE_MQH
 
 #include "Constants.mqh"
 #include "Structures.mqh"
 #include "TradeManager.mqh"
+
 
 //+------------------------------------------------------------------+
 //| Execution Settings                                               |
@@ -47,11 +47,25 @@ struct ExecutionState
    string errorMessage;
 };
 
+
 ExecutionState g_Execution;
 
 
 //+------------------------------------------------------------------+
-//| Find Executed EA Position                                       |
+//| Reset                                                            |
+//+------------------------------------------------------------------+
+
+void ResetExecutionState()
+{
+   ZeroMemory(g_Execution);
+
+   g_Execution.valid = false;
+   g_Execution.executed = false;
+}
+
+
+//+------------------------------------------------------------------+
+//| Find EA Position                                                 |
 //+------------------------------------------------------------------+
 
 ulong FindExecutedPositionTicket()
@@ -91,35 +105,28 @@ ulong FindExecutedPositionTicket()
 }
 
 
-
-//+------------------------------------------------------------------+
-//| Reset                                                            |
-//+------------------------------------------------------------------+
-
-void ResetExecutionState()
-{
-   ZeroMemory(g_Execution);
-
-   g_Execution.valid    = false;
-   g_Execution.executed = false;
-}
-
-
 //+------------------------------------------------------------------+
 //| Trading Allowed                                                  |
 //+------------------------------------------------------------------+
-
 
 bool IsTradingAllowed()
 {
    if(!InpEnableTrading)
       return false;
 
-   if(!TerminalInfoInteger(TERMINAL_TRADE_ALLOWED))
+   if(!TerminalInfoInteger(
+         TERMINAL_TRADE_ALLOWED
+      ))
+   {
       return false;
+   }
 
-   if(!MQLInfoInteger(MQL_TRADE_ALLOWED))
+   if(!MQLInfoInteger(
+         MQL_TRADE_ALLOWED
+      ))
+   {
       return false;
+   }
 
    long tradeMode =
       SymbolInfoInteger(
@@ -127,8 +134,11 @@ bool IsTradingAllowed()
          SYMBOL_TRADE_MODE
       );
 
-   if(tradeMode == SYMBOL_TRADE_MODE_DISABLED)
+   if(tradeMode ==
+      SYMBOL_TRADE_MODE_DISABLED)
+   {
       return false;
+   }
 
    return true;
 }
@@ -140,13 +150,21 @@ bool IsTradingAllowed()
 
 void InitializeExecutionEngine()
 {
-   g_Trade.SetExpertMagicNumber(InpMagicNumber);
+   g_Trade.SetExpertMagicNumber(
+      InpMagicNumber
+   );
 
-   g_Trade.SetDeviationInPoints(InpSlippagePoints);
+   g_Trade.SetDeviationInPoints(
+      InpSlippagePoints
+   );
 
-   g_Trade.SetTypeFillingBySymbol(_Symbol);
+   g_Trade.SetTypeFillingBySymbol(
+      _Symbol
+   );
 
    ResetExecutionState();
+
+   ResetTradeManagement();
 }
 
 
@@ -184,51 +202,32 @@ bool IsSpreadAcceptable()
    double spreadPoints =
       (ask - bid) / point;
 
-   return spreadPoints <= InpMaxSpreadPoints;
+   return (
+      spreadPoints <=
+      InpMaxSpreadPoints
+   );
 }
 
 
 //+------------------------------------------------------------------+
-//| Existing EA position                                             |
+//| Existing EA Position                                             |
 //+------------------------------------------------------------------+
 
 bool HasOpenPosition()
 {
-   for(int i = PositionsTotal() - 1;
-       i >= 0;
-       i--)
-   {
-      ulong ticket =
-         PositionGetTicket(i);
-
-      if(ticket == 0)
-         continue;
-
-      if(!PositionSelectByTicket(ticket))
-         continue;
-
-      if(PositionGetString(POSITION_SYMBOL) != _Symbol)
-         continue;
-
-      ulong magic =
-         (ulong)
-         PositionGetInteger(POSITION_MAGIC);
-
-      if(magic != InpMagicNumber)
-         continue;
-
-      return true;
-   }
-
-   return false;
+   return (
+      FindExecutedPositionTicket() != 0
+   );
 }
 
 
 //+------------------------------------------------------------------+
-//| Normalize lot                                                    |
+//| Normalize Lot                                                    |
 //+------------------------------------------------------------------+
 
-double NormalizeLotSize(double lotSize)
+double NormalizeLotSize(
+   double lotSize
+)
 {
    double minimum =
       SymbolInfoDouble(
@@ -255,6 +254,7 @@ double NormalizeLotSize(double lotSize)
       return 0.0;
    }
 
+
    lotSize =
       MathMax(
          minimum,
@@ -267,10 +267,12 @@ double NormalizeLotSize(double lotSize)
          lotSize
       );
 
+
    lotSize =
       MathFloor(
          lotSize / step
       ) * step;
+
 
    int digits = 2;
 
@@ -283,6 +285,7 @@ double NormalizeLotSize(double lotSize)
    if(step < 0.001)
       digits = 4;
 
+
    return NormalizeDouble(
       lotSize,
       digits
@@ -291,7 +294,7 @@ double NormalizeLotSize(double lotSize)
 
 
 //+------------------------------------------------------------------+
-//| Risk based lot                                                   |
+//| Risk Based Lot                                                   |
 //+------------------------------------------------------------------+
 
 double CalculateRiskBasedLot(
@@ -307,10 +310,12 @@ double CalculateRiskBasedLot(
    if(balance <= 0.0)
       return 0.0;
 
+
    double riskMoney =
       balance *
       InpRiskPercent /
       100.0;
+
 
    double tickSize =
       SymbolInfoDouble(
@@ -324,11 +329,13 @@ double CalculateRiskBasedLot(
          SYMBOL_TRADE_TICK_VALUE
       );
 
+
    double priceRisk =
       MathAbs(
          entryPrice -
          stopLoss
       );
+
 
    if(riskMoney <= 0.0 ||
       tickSize <= 0.0 ||
@@ -338,20 +345,25 @@ double CalculateRiskBasedLot(
       return 0.0;
    }
 
+
    double ticks =
       priceRisk /
       tickSize;
+
 
    double lossPerLot =
       ticks *
       tickValue;
 
+
    if(lossPerLot <= 0.0)
       return 0.0;
+
 
    double lotSize =
       riskMoney /
       lossPerLot;
+
 
    return NormalizeLotSize(
       lotSize
@@ -360,7 +372,7 @@ double CalculateRiskBasedLot(
 
 
 //+------------------------------------------------------------------+
-//| Calculate lot                                                    |
+//| Calculate Execution Lot                                          |
 //+------------------------------------------------------------------+
 
 double CalculateExecutionLot(
@@ -376,6 +388,7 @@ double CalculateExecutionLot(
       );
    }
 
+
    return NormalizeLotSize(
       InpFixedLotSize
    );
@@ -383,7 +396,7 @@ double CalculateExecutionLot(
 
 
 //+------------------------------------------------------------------+
-//| Normalize price                                                  |
+//| Normalize Price                                                  |
 //+------------------------------------------------------------------+
 
 double NormalizeExecutionPrice(
@@ -391,8 +404,7 @@ double NormalizeExecutionPrice(
 )
 {
    int digits =
-      (int)
-      SymbolInfoInteger(
+      (int)SymbolInfoInteger(
          _Symbol,
          SYMBOL_DIGITS
       );
@@ -405,7 +417,7 @@ double NormalizeExecutionPrice(
 
 
 //+------------------------------------------------------------------+
-//| Validate BUY prices                                              |
+//| Validate BUY                                                     |
 //+------------------------------------------------------------------+
 
 bool ValidateBuyPrices(
@@ -422,18 +434,21 @@ bool ValidateBuyPrices(
    if(ask <= 0.0)
       return false;
 
+
    if(stopLoss >= ask)
       return false;
 
+
    if(takeProfit <= ask)
       return false;
+
 
    return true;
 }
 
 
 //+------------------------------------------------------------------+
-//| Validate SELL prices                                             |
+//| Validate SELL                                                    |
 //+------------------------------------------------------------------+
 
 bool ValidateSellPrices(
@@ -450,18 +465,21 @@ bool ValidateSellPrices(
    if(bid <= 0.0)
       return false;
 
+
    if(stopLoss <= bid)
       return false;
 
+
    if(takeProfit >= bid)
       return false;
+
 
    return true;
 }
 
 
 //+------------------------------------------------------------------+
-//| Broker stop validation                                           |
+//| Broker Stops                                                     |
 //+------------------------------------------------------------------+
 
 bool ValidateBrokerStops(
@@ -479,14 +497,17 @@ bool ValidateBrokerStops(
    if(point <= 0.0)
       return false;
 
+
    long stopsLevel =
       SymbolInfoInteger(
          _Symbol,
          SYMBOL_TRADE_STOPS_LEVEL
       );
 
+
    double minimumDistance =
       stopsLevel * point;
+
 
    double bid =
       SymbolInfoDouble(
@@ -500,20 +521,35 @@ bool ValidateBrokerStops(
          SYMBOL_ASK
       );
 
+
+   if(bid <= 0.0 ||
+      ask <= 0.0)
+   {
+      return false;
+   }
+
+
    //===============================================================
    // BUY
    //===============================================================
 
    if(direction == BIAS_BULLISH)
    {
-      if((ask - stopLoss) < minimumDistance)
+      if((bid - stopLoss) <
+         minimumDistance)
+      {
          return false;
+      }
 
-      if((takeProfit - ask) < minimumDistance)
+      if((takeProfit - ask) <
+         minimumDistance)
+      {
          return false;
+      }
 
       return true;
    }
+
 
    //===============================================================
    // SELL
@@ -521,14 +557,21 @@ bool ValidateBrokerStops(
 
    if(direction == BIAS_BEARISH)
    {
-      if((stopLoss - bid) < minimumDistance)
+      if((stopLoss - ask) <
+         minimumDistance)
+      {
          return false;
+      }
 
-      if((bid - takeProfit) < minimumDistance)
+      if((bid - takeProfit) <
+         minimumDistance)
+      {
          return false;
+      }
 
       return true;
    }
+
 
    return false;
 }
@@ -545,6 +588,7 @@ bool PrepareBuyExecution(
 {
    ResetExecutionState();
 
+
    if(!IsTradingAllowed())
    {
       g_Execution.errorMessage =
@@ -552,6 +596,7 @@ bool PrepareBuyExecution(
 
       return false;
    }
+
 
    if(InpOnePositionOnly &&
       HasOpenPosition())
@@ -562,6 +607,7 @@ bool PrepareBuyExecution(
       return false;
    }
 
+
    if(!IsSpreadAcceptable())
    {
       g_Execution.errorMessage =
@@ -570,16 +616,38 @@ bool PrepareBuyExecution(
       return false;
    }
 
+
    double ask =
       SymbolInfoDouble(
          _Symbol,
          SYMBOL_ASK
       );
 
+
+   if(ask <= 0.0)
+   {
+      g_Execution.errorMessage =
+         "Invalid ASK price.";
+
+      return false;
+   }
+
+
+   stopLoss =
+      NormalizeExecutionPrice(
+         stopLoss
+      );
+
+   takeProfit =
+      NormalizeExecutionPrice(
+         takeProfit
+      );
+
+
    if(!ValidateBuyPrices(
-      stopLoss,
-      takeProfit
-   ))
+         stopLoss,
+         takeProfit
+      ))
    {
       g_Execution.errorMessage =
          "Invalid BUY SL/TP.";
@@ -587,11 +655,12 @@ bool PrepareBuyExecution(
       return false;
    }
 
+
    if(!ValidateBrokerStops(
-      BIAS_BULLISH,
-      stopLoss,
-      takeProfit
-   ))
+         BIAS_BULLISH,
+         stopLoss,
+         takeProfit
+      ))
    {
       g_Execution.errorMessage =
          "BUY SL/TP violates broker stops.";
@@ -599,11 +668,13 @@ bool PrepareBuyExecution(
       return false;
    }
 
+
    double lotSize =
       CalculateExecutionLot(
          ask,
          stopLoss
       );
+
 
    if(lotSize <= 0.0)
    {
@@ -612,6 +683,7 @@ bool PrepareBuyExecution(
 
       return false;
    }
+
 
    g_Execution.valid =
       true;
@@ -625,14 +697,11 @@ bool PrepareBuyExecution(
       );
 
    g_Execution.stopLoss =
-      NormalizeExecutionPrice(
-         stopLoss
-      );
+      stopLoss;
 
    g_Execution.takeProfit =
-      NormalizeExecutionPrice(
-         takeProfit
-      );
+      takeProfit;
+
 
    return true;
 }
@@ -649,6 +718,7 @@ bool PrepareSellExecution(
 {
    ResetExecutionState();
 
+
    if(!IsTradingAllowed())
    {
       g_Execution.errorMessage =
@@ -656,6 +726,7 @@ bool PrepareSellExecution(
 
       return false;
    }
+
 
    if(InpOnePositionOnly &&
       HasOpenPosition())
@@ -666,6 +737,7 @@ bool PrepareSellExecution(
       return false;
    }
 
+
    if(!IsSpreadAcceptable())
    {
       g_Execution.errorMessage =
@@ -674,16 +746,38 @@ bool PrepareSellExecution(
       return false;
    }
 
+
    double bid =
       SymbolInfoDouble(
          _Symbol,
          SYMBOL_BID
       );
 
+
+   if(bid <= 0.0)
+   {
+      g_Execution.errorMessage =
+         "Invalid BID price.";
+
+      return false;
+   }
+
+
+   stopLoss =
+      NormalizeExecutionPrice(
+         stopLoss
+      );
+
+   takeProfit =
+      NormalizeExecutionPrice(
+         takeProfit
+      );
+
+
    if(!ValidateSellPrices(
-      stopLoss,
-      takeProfit
-   ))
+         stopLoss,
+         takeProfit
+      ))
    {
       g_Execution.errorMessage =
          "Invalid SELL SL/TP.";
@@ -691,11 +785,12 @@ bool PrepareSellExecution(
       return false;
    }
 
+
    if(!ValidateBrokerStops(
-      BIAS_BEARISH,
-      stopLoss,
-      takeProfit
-   ))
+         BIAS_BEARISH,
+         stopLoss,
+         takeProfit
+      ))
    {
       g_Execution.errorMessage =
          "SELL SL/TP violates broker stops.";
@@ -703,11 +798,13 @@ bool PrepareSellExecution(
       return false;
    }
 
+
    double lotSize =
       CalculateExecutionLot(
          bid,
          stopLoss
       );
+
 
    if(lotSize <= 0.0)
    {
@@ -716,6 +813,7 @@ bool PrepareSellExecution(
 
       return false;
    }
+
 
    g_Execution.valid =
       true;
@@ -729,16 +827,37 @@ bool PrepareSellExecution(
       );
 
    g_Execution.stopLoss =
-      NormalizeExecutionPrice(
-         stopLoss
-      );
+      stopLoss;
 
    g_Execution.takeProfit =
-      NormalizeExecutionPrice(
-         takeProfit
-      );
+      takeProfit;
+
 
    return true;
+}
+
+
+//+------------------------------------------------------------------+
+//| Validate Trade Result                                            |
+//+------------------------------------------------------------------+
+
+bool IsSuccessfulTradeResult()
+{
+   uint retcode =
+      g_Trade.ResultRetcode();
+
+
+   if(retcode == TRADE_RETCODE_DONE)
+      return true;
+
+   if(retcode == TRADE_RETCODE_DONE_PARTIAL)
+      return true;
+
+   if(retcode == TRADE_RETCODE_PLACED)
+      return true;
+
+
+   return false;
 }
 
 
@@ -752,12 +871,13 @@ bool ExecuteBuy(
 )
 {
    if(!PrepareBuyExecution(
-      stopLoss,
-      takeProfit
-   ))
+         stopLoss,
+         takeProfit
+      ))
    {
       return false;
    }
+
 
    bool result =
       g_Trade.Buy(
@@ -769,13 +889,24 @@ bool ExecuteBuy(
          "ScalpingEA BUY"
       );
 
-   if(!result)
+
+   if(!result ||
+      !IsSuccessfulTradeResult())
    {
       g_Execution.errorMessage =
          g_Trade.ResultRetcodeDescription();
 
+      Print(
+         "ExecutionEngine: BUY failed | ",
+         "Retcode=",
+         g_Trade.ResultRetcode(),
+         " | ",
+         g_Execution.errorMessage
+      );
+
       return false;
    }
+
 
    g_Execution.executed =
       true;
@@ -783,9 +914,87 @@ bool ExecuteBuy(
    g_Execution.executionTime =
       TimeCurrent();
 
-g_Execution.positionTicket =
-   FindExecutedPositionTicket();
-   
+
+   //===============================================================
+   // IMPORTANT:
+   // Get the actual position created by the broker.
+   //===============================================================
+
+   ulong ticket =
+      FindExecutedPositionTicket();
+
+
+   if(ticket == 0)
+   {
+      g_Execution.errorMessage =
+         "BUY accepted but EA position was not found.";
+
+      g_Execution.executed =
+         false;
+
+      return false;
+   }
+
+
+   g_Execution.positionTicket =
+      ticket;
+
+
+   //===============================================================
+   // Read actual filled values.
+   //===============================================================
+
+   if(PositionSelectByTicket(ticket))
+   {
+      g_Execution.entryPrice =
+         PositionGetDouble(
+            POSITION_PRICE_OPEN
+         );
+
+      g_Execution.stopLoss =
+         PositionGetDouble(
+            POSITION_SL
+         );
+
+      g_Execution.takeProfit =
+         PositionGetDouble(
+            POSITION_TP
+         );
+   }
+
+
+   //===============================================================
+   // Immediately initialize TradeManager.
+   //===============================================================
+
+   if(!InitializeTradeManagement(
+         ticket
+      ))
+   {
+      Print(
+         "ExecutionEngine: BUY opened, ",
+         "but TradeManager initialization failed. ",
+         "Ticket=",
+         ticket
+      );
+   }
+
+
+   Print(
+      "ExecutionEngine: BUY executed | ",
+      "Ticket=",
+      ticket,
+      " | Lot=",
+      g_Execution.lotSize,
+      " | Entry=",
+      g_Execution.entryPrice,
+      " | SL=",
+      g_Execution.stopLoss,
+      " | TP=",
+      g_Execution.takeProfit
+   );
+
+
    return true;
 }
 
@@ -800,12 +1009,13 @@ bool ExecuteSell(
 )
 {
    if(!PrepareSellExecution(
-      stopLoss,
-      takeProfit
-   ))
+         stopLoss,
+         takeProfit
+      ))
    {
       return false;
    }
+
 
    bool result =
       g_Trade.Sell(
@@ -817,13 +1027,24 @@ bool ExecuteSell(
          "ScalpingEA SELL"
       );
 
-   if(!result)
+
+   if(!result ||
+      !IsSuccessfulTradeResult())
    {
       g_Execution.errorMessage =
          g_Trade.ResultRetcodeDescription();
 
+      Print(
+         "ExecutionEngine: SELL failed | ",
+         "Retcode=",
+         g_Trade.ResultRetcode(),
+         " | ",
+         g_Execution.errorMessage
+      );
+
       return false;
    }
+
 
    g_Execution.executed =
       true;
@@ -831,20 +1052,106 @@ bool ExecuteSell(
    g_Execution.executionTime =
       TimeCurrent();
 
-g_Execution.positionTicket =
-   FindExecutedPositionTicket();
+
+   //===============================================================
+   // Get actual broker position.
+   //===============================================================
+
+   ulong ticket =
+      FindExecutedPositionTicket();
+
+
+   if(ticket == 0)
+   {
+      g_Execution.errorMessage =
+         "SELL accepted but EA position was not found.";
+
+      g_Execution.executed =
+         false;
+
+      return false;
+   }
+
+
+   g_Execution.positionTicket =
+      ticket;
+
+
+   //===============================================================
+   // Read actual filled values.
+   //===============================================================
+
+   if(PositionSelectByTicket(ticket))
+   {
+      g_Execution.entryPrice =
+         PositionGetDouble(
+            POSITION_PRICE_OPEN
+         );
+
+      g_Execution.stopLoss =
+         PositionGetDouble(
+            POSITION_SL
+         );
+
+      g_Execution.takeProfit =
+         PositionGetDouble(
+            POSITION_TP
+         );
+   }
+
+
+   //===============================================================
+   // Immediately initialize TradeManager.
+   //===============================================================
+
+   if(!InitializeTradeManagement(
+         ticket
+      ))
+   {
+      Print(
+         "ExecutionEngine: SELL opened, ",
+         "but TradeManager initialization failed. ",
+         "Ticket=",
+         ticket
+      );
+   }
+
+
+   Print(
+      "ExecutionEngine: SELL executed | ",
+      "Ticket=",
+      ticket,
+      " | Lot=",
+      g_Execution.lotSize,
+      " | Entry=",
+      g_Execution.entryPrice,
+      " | SL=",
+      g_Execution.stopLoss,
+      " | TP=",
+      g_Execution.takeProfit
+   );
+
 
    return true;
 }
 
 
 //+------------------------------------------------------------------+
-//| Execute validated direction                                      |
+//| Execute Validated Direction                                      |
 //+------------------------------------------------------------------+
 //
-// Direction is supplied by the already validated setup.
-// Execution does NOT determine bias or setup direction.
+// Direction comes ONLY from the validated EntryEngine setup.
 //
+// ExecutionEngine does NOT:
+//
+// - determine bias
+// - search for OB
+// - search for FVG
+// - create confirmation
+// - create another setup
+//
+// It only executes the already validated setup.
+//+------------------------------------------------------------------+
 
 bool ExecuteValidatedTrade(
    ENUM_BIAS direction,
@@ -860,6 +1167,7 @@ bool ExecuteValidatedTrade(
       );
    }
 
+
    if(direction == BIAS_BEARISH)
    {
       return ExecuteSell(
@@ -868,14 +1176,43 @@ bool ExecuteValidatedTrade(
       );
    }
 
+
    g_Execution.errorMessage =
       "Invalid setup direction.";
+
 
    return false;
 }
 
 
 //+------------------------------------------------------------------+
+//| Check Execution State                                            |
+//+------------------------------------------------------------------+
+
+bool IsExecutionActive()
+{
+   if(!g_Execution.executed)
+      return false;
+
+   return (
+      FindExecutedPositionTicket() != 0
+   );
+}
+
+
+//+------------------------------------------------------------------+
+//| Cleanup Execution State                                          |
+//+------------------------------------------------------------------+
+
+void CleanupExecution()
+{
+   if(FindExecutedPositionTicket() != 0)
+      return;
+
+   ResetExecutionState();
+}
+
+
+//+------------------------------------------------------------------+
 
 #endif
-
